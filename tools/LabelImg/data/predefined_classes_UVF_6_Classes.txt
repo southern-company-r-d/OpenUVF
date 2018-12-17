@@ -1,0 +1,6 @@
+crack-through
+crack-partial
+crack-busbar
+crack-hole
+crack-edge
+crack-corner
