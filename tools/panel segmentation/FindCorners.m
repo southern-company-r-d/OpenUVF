@@ -185,14 +185,10 @@ for k = length(panels):-1:1
     
     %% Find true corners of panel
     % Find the intersection point of each extrapolated linear regression line
-    TL = InterX([leftx;lefty],[topx;topy]);
-    BL = InterX([leftx;lefty],[bottomx;bottomy]);
-    TR = InterX([rightx;righty],[topx;topy]);
-    BR = InterX([rightx;righty],[bottomx;bottomy]);
-%       TL = (topLeft);
-%       BL = (bottomLeft);
-%       TR = (topRight);
-%       BR = (bottomRight);
+    TL = CornerIntersects([leftx;lefty],[topx;topy]);
+    BL = CornerIntersects([leftx;lefty],[bottomx;bottomy]);
+    TR = CornerIntersects([rightx;righty],[topx;topy]);
+    BR = CornerIntersects([rightx;righty],[bottomx;bottomy]);
     
     %% Determine if panels are in the image space
     corners = [TL'; BL'; TR'; BR'];
