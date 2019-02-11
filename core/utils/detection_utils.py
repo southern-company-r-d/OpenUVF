@@ -30,7 +30,7 @@ from core.object_detection.utils import visualization_utils as vis_util
 
 
 
-def image_pipeline(pipeline_type, images_dir, shard_images_count, cell_counts=[12, 6], max_batch_size = 72, module_spec='APEX_MDSC\d\d\d\d\d-\d', image_ext='.PNG', inc_incmplt_modules=False):
+def image_pipeline(pipeline_type, images_dir, shard_images_count, cell_counts=[12, 6], max_batch_size = 72, module_spec='A\d\d\d\d\d-\d', image_ext='.PNG', inc_incmplt_modules=False):
     
     #List contents of directory
     images_list = os.listdir(images_dir)
@@ -86,7 +86,8 @@ def image_pipeline(pipeline_type, images_dir, shard_images_count, cell_counts=[1
             except Exception:
                 #Ignore path if it does not follow image label spec
                 continue
-                
+        
+        print(modules)
         #Identify cells that belong to modules
         output_list = []
         module_cell_counts = []
