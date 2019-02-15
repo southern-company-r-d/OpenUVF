@@ -1,6 +1,7 @@
 function [panels] = GetCellProperties(panels, imgType, modOrCell, numCells, numCellsWide, ib, plots)
 %% GetCellProperties.m 
 % Joey Richardson, Will Hobbs - Southern Company Services 2018
+% Copyright © 2019 Southern Company Services, Inc.
 % This function segments cells in each panel and determines various image
 % properties about each cell for cell classification.
 
