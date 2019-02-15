@@ -1,7 +1,8 @@
 function manual_classification()
 % UVF_ManualClassification - Tool to classify UVF Image Sets
-%
+% 
 % Braden Gilleland - Southern Company Services R&D 2018
+% Copyright © 2019 Southern Company Services, Inc.
 %
 % UVF_ManualClassification provides a simple interface to manually classify
 % cells and assign them to specific folders for further review and
