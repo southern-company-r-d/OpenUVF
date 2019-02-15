@@ -1,5 +1,6 @@
 function [x,y] = Ellipse(x1,y1,x2,y2,e)
 % Ellipse.m
+% Copyright © 2019 Southern Company Services, Inc.
 % StackOverflow
 % Creates an ellipse from major axis vericies and eccentricity
 a = 1/2*sqrt((x2-x1)^2+(y2-y1)^2);
