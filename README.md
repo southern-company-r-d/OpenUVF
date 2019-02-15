@@ -1,5 +1,5 @@
 # OpenUVF
-## Copyright Southern Company Services R&D
+## Copyright © 2019 Southern Company Services, Inc.
 
 ## Overview
 
