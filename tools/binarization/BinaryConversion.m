@@ -1,6 +1,7 @@
 function bwmodule = BinaryConversion(I, imgType, modOrCell, plots, numCells, numCellsWide, ib)
 %% BinaryConversion.m 
 % Joey Richardson - Southern Company Services 2018
+% Copyright © 2019 Southern Company Services, Inc.
 % This function uses various processing techniques to convert an input
 % image to a binary image to decrease information density for further
 % processing. The function was designed to work with the CrackIdentification
