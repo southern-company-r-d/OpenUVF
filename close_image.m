@@ -1,5 +1,6 @@
 function [closed, I] = close_image(bw, I, plots)
-
+        % Copyright © 2019 Southern Company Services, Inc.  All rights reserved.
+        
         %Removing Definite Noise
         bw = bwareafilt(bw, [1000, 10000000]); %Minimum size requirement
 
