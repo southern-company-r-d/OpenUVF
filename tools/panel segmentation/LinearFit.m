@@ -1,6 +1,7 @@
 function [fit_rows, fit_columns, coefficients] = LinearFit(rows, cols, iterations)
 % LinearFit.m 
 % Joey Richardson - Southern Company Services 2018
+% Copyright © 2019 Southern Company Services, Inc.
 % Linear regression function for images. Used in the CrackIdentification
 % script when segmenting panels to find the best fit edges of each panel
 % side. 

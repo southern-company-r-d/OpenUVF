@@ -1,6 +1,7 @@
 function panels = FindCorners(closed, plots)
 %% FindCorners.m 
 % Joey Richardson - Southern Company Services 2018
+% Copyright © 2019 Southern Company Services, Inc.
 % This program finds accurate estimations of the corners of each full solar
 % panel in an image. 
 

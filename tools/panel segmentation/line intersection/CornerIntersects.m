@@ -1,5 +1,5 @@
 function IX = CornerIntersects(L1, L2)
-
+% Copyright © 2019 Southern Company Services, Inc.
     %Define Values
     L1Xs = L1(1, :);
     L1Ys = L1(2, :);

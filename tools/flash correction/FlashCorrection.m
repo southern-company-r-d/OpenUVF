@@ -1,6 +1,7 @@
 function flashCorrected = FlashCorrection(I, flashFolder, plots)
 %% FlashCorrection.m 
 % Joey Richardson - Southern Company Services 2018
+% Copyright © 2019 Southern Company Services, Inc.
 % This program averages images of a camera flash to create a mask for
 % correcting the uneven lighting across an image due to the flash.
 

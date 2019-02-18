@@ -1,6 +1,7 @@
 function warpedPanels = ClassifyCracks(warpedPanels, plots, textType)
 %% ClassifyCracks.m 
 % Joey Richardson - Southern Company Services 2018
+% Copyright © 2019 Southern Company Services, Inc.
 % This function classifies cell damage based on cell properties
 
 % Inputs:

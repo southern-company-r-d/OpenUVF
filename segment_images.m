@@ -1,5 +1,5 @@
 function segment_images(inputs)
-
+    % Copyright © 2019 Southern Company Services, Inc.  All rights reserved.
 
 %% Function Setup
 
