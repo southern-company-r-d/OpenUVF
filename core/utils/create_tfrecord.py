@@ -29,6 +29,7 @@ Example usage:
 #CHANGELOG - Braden Gilleland - Southern Company
 # 1. Commented out mask code
 # 2. Modified to be a generic PascalVOC to TFRecords file
+# 3. Renamed to reflect the lattermost change
 
 
 import hashlib
