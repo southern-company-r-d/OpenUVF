@@ -8,7 +8,7 @@ OpenUVF is a software utility developed by Southern Company R&D [or whatever nam
 OpenUVF is intended for research and development purposes... [add polite description to avoid users being disapointed]
 ## Documentation
 
-[reference to TensorFlow and its license]
+[reference to TensorFlow, its owner, and its license. Mention what portions we used and where we included it in our code]
 
 [add reference to OpenUVF license]
 
