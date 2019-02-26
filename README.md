@@ -1,6 +1,5 @@
 # OpenUVF
 Copyright © 2019 Southern Company Services, Inc. [Licensed](https://github.com/williamhobbs/OpenUVF/blob/master/LICENSE) under Apache 2.0.
-
 OpenUVF uses portions of Google's [TensorFlow](http://www.tensorflow.org), licensed under [Apache 2.0](https://github.com/tensorflow/tensorflow/blob/master/LICENSE).
 
 ## Overview
@@ -18,3 +17,6 @@ This software requires a number of items, including:
 A portion of TensorFlow, specifically the [Object Detection API](https://github.com/tensorflow/models/tree/master/research/object_detection), is redistributed with OpenUVF. TensorFlow is a Google product and is licensed under [Apache 2.0](https://github.com/tensorflow/tensorflow/blob/master/LICENSE). It is included in our code [here](https://github.com/williamhobbs/OpenUVF/tree/master/core/object_detection).
 
 This software is provided as-is with no warranties or conditions. See our [license](https://github.com/williamhobbs/OpenUVF/blob/master/LICENSE) for more details. 
+
+## Details
+More detailed documentation is in the works...
