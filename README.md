@@ -19,7 +19,7 @@ This software requires the following items:
 A portion of TensorFlow, specifically the [Object Detection API](https://github.com/tensorflow/models/tree/master/research/object_detection), is redistributed with OpenUVF. It is included in our code [here](https://github.com/southern-company-r-d/OpenUVF/tree/master/core/object_detection).
 
 ## Details
-More detailed documentation is in the works...
+More detailed documentation is in the works. For now, check out what we have [here](https://github.com/southern-company-r-d/OpenUVF/tree/master/docs).
 
 ## Disclaimer
 As set forth in the [license](https://github.com/southern-company-r-d/OpenUVF/blob/master/LICENSE), Southern Company Services, Inc., provides OpenUVF on an “as is” basis, without warranties or conditions of any kind, either express or implied, including, without limitation, any warranties or conditions of title, non-infringement, merchantability, or fitness for a particular purpose. You (the individual or legal entity exercising permissions granted by this license) are solely responsible for determining the appropriateness of using or redistributing OpenUVF and assume any risks associated with your exercise of permissions under this license.
