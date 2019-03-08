@@ -1,6 +1,7 @@
 # OpenUVF
-Copyright © 2019 Southern Company Services, Inc. [Licensed](https://github.com/williamhobbs/OpenUVF/blob/master/LICENSE) under Apache 2.0.
-OpenUVF uses portions of Google's [TensorFlow](http://www.tensorflow.org), licensed under [Apache 2.0](https://github.com/tensorflow/tensorflow/blob/master/LICENSE).
+Copyright © 2019 Southern Company Services, Inc. All rights reserved. OpenUVF is [licensed](https://github.com/southern-company-r-d/OpenUVF/blob/master/LICENSE) under the Apache License, Version 2.0.
+
+OpenUVF uses portions of Google's [TensorFlow](http://www.tensorflow.org), also licensed under [Apache 2.0](https://github.com/tensorflow/tensorflow/blob/master/LICENSE).
 
 ## Overview
 
@@ -20,3 +21,6 @@ This software is provided as-is with no warranties or conditions. See our [licen
 
 ## Details
 More detailed documentation is in the works...
+
+## Disclaimer
+As set forth in the license, Southern Company Services, Inc. provides OpenUVF on an “as is” basis, without warranties or conditions of any kind, either express or implied, including, without limitation, any warranties or conditions of title, non-infringement, merchantability, or fitness for a particular purpose. You (the individual or legal entity exercising permissions granted by this license) are solely responsible for determining the appropriateness of using or redistributing OpenUVF and assume any risks associated with your exercise of permissions under this license.
