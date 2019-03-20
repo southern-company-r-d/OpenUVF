@@ -21,7 +21,7 @@ function segment_images(inputs)
     tic
     
     %File Directory Inputs
-    inputDirectory = 'inputs/';%'S:/Workgroups/SCS Research and Environmental Affairs/RTM/BHGilleland/Projects/UV Fluorescence/Images/APEX - Site Revisit with 1032 Module Speedrun - (10-15-2018)/Night UVF/Single Row Speed Run (80 strings)/';%inputs/';
+    inputDirectory = 'inputs/';
     inputFileType = '.JPG';
     outputDirectoryCellBinary = 'outputs/Cells - Binary/';
     outputDirectoryCellColor = 'outputs/Cells - Color/';
