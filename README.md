@@ -4,8 +4,7 @@ Copyright © 2019 Southern Company Services, Inc. All rights reserved. OpenUVF i
 OpenUVF uses portions of [TensorFlow](http://www.tensorflow.org) ([TensorFlow on GitHub](https://github.com/tensorflow/tensorflow)), also licensed under [Apache 2.0](https://github.com/tensorflow/tensorflow/blob/master/LICENSE), copyright 2018 The TensorFlow Authors.
 
 ## Overview
----HEADER IMAGE---
-OpenUVF is a software utility developed by Southern Company R&D, a subdivision of Southern Company Services, Inc., to automatically process and analyze Ultraviolet Fluorescence (UVF) images of solar PV modules. OpenUVF includes the complete workflow necessary to inspect complete solar PV plants, including automatic segmentation of PV modules, detection of cracks and other anomolies, and the tracking of plant wide fault statistics. It is imagined as a foundation, from which UVF's potential as a practical inspection technique complementing existing PV inspection techniques like Electroluminescence and Thermography can be realized.
+OpenUVF is a software utility developed by Southern Company R&D, a subdivision of Southern Company Services, Inc., to automatically process and analyze Ultraviolet Fluorescence (UVF) images of solar PV modules. OpenUVF includes the complete workflow necessary to inspect solar PV plants with UVF, including automatic segmentation of PV modules, detection of cracks and other anomolies, and the tracking of plant wide fault statistics. It is imagined as a foundation, from which UVF's potential as a practical inspection technique complementing existing PV inspection techniques like Electroluminescence and Thermography can be realized.
 
 OpenUVF is intended for research and development purposes. It is a work in progress, and may not work for your application or on your system. We hope you find it useful, though! If you have any inquiries about OpenUVF or UVF in general, feel free to raise an issue.
 
