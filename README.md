@@ -35,6 +35,17 @@ Once a model has been trained, the processing workflow steps include: 1) acquiri
 
 ![Workflow diagram](https://github.com/southern-company-r-d/OpenUVF/blob/master/docs/images/processing_workflow2.jpg)
 
+## Sample Images & Models
+A set of sample images and trained models are avialable for your use. 
+
+Models:
+* View files: https://www.dropbox.com/sh/5mi0tzs69xffgom/AADzppHk5JBGNrweSrOLLpv_a?dl=0
+* Download .zip archive: https://www.dropbox.com/s/n8z4ej4aqu2i4o1/models.zip?dl=1
+
+Images (all images in the following links are Copyright © 2019 Southern Company Services, Inc.):
+* View files: https://www.dropbox.com/sh/tx211rja0uapaf1/AAAD_zD4IF_LZB4fVEZM9LBma?dl=0 
+* Download .zip archive: https://www.dropbox.com/s/dy3sjmyv21fk8o2/site%20A%20images.zip?dl=1 
+
 ## Contributing
 OpenUVF is intended as a foundation for the further development of UVF. Currently we are working out the details to allow external contributions, but cannot currently accept contributions.
 
