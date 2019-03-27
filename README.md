@@ -36,7 +36,7 @@ Once a model has been trained, the processing workflow steps include: 1) acquiri
 ![Workflow diagram](https://github.com/southern-company-r-d/OpenUVF/blob/master/docs/images/processing_workflow2.jpg)
 
 ## Contributing
-OpenUVF is intended as a foundation for the further development of UVF. Currently we are working out the details to allow external contributions, but cannot accept contributions until these legal matters are settled.
+OpenUVF is intended as a foundation for the further development of UVF. Currently we are working out the details to allow external contributions, but cannot currently accept contributions.
 
 ## Disclaimer
 As set forth in the [license](https://github.com/southern-company-r-d/OpenUVF/blob/master/LICENSE), Southern Company Services, Inc., provides OpenUVF on an “as is” basis, without warranties or conditions of any kind, either express or implied, including, without limitation, any warranties or conditions of title, non-infringement, merchantability, or fitness for a particular purpose. You (the individual or legal entity exercising permissions granted by this license) are solely responsible for determining the appropriateness of using or redistributing OpenUVF and assume any risks associated with your exercise of permissions under this license.
