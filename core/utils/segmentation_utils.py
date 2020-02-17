@@ -17,7 +17,7 @@ import time
 import numpy as np
 import pandas as pd
 import cv2 as cv
-
+import math
 
 
 
@@ -32,7 +32,8 @@ import cv2 as cv
 #   4. cell_output_size (tuple): resolution of the scaled output cell images
 
 
-def cell_segmentation(module_im, cell_output_dir, cell_counts = (12, 6), cell_aspect_ratio = (1,1),  cell_output_size = (150,150)):
+def cell_segmentation(module_im, cell_output_dir, cell_counts = (12, 6), cell_aspect_ratio = (1,1),  cell_output_size = (150,150),\
+                      debug = True):
     
     #Define approximate module aspect ratio and total cell count
     module_aspect_ratio = cell_counts(2)/cell_counts(1)
@@ -51,19 +52,280 @@ def cell_segmentation(module_im, cell_output_dir, cell_counts = (12, 6), cell_as
     #for (i in range(
         
     return cell_count    
+
+
+def processImage(image, debug=True):
+        
+      
+    
+    
+    
+    #Adjust hue to remove influence of wrapping (hue is specified as 360 deg around a cylinder - 180 for opencv for uint8 type)
+    hue_filtered = hue
+    #hue_filtered[hue >= 170] = 0
+    #hue_filtered[val < 48] = 0
+
+    
+# edgeDetection
+#
+# Scrip applying contextual information to refine the Canny edge detection algorithm
+#
+# Inputs:
+#   1. rgb
+#   2. rgb_min: single channel image where the value for each pixel was defined as the minimum of all rgb channels 
+#   3. gray: standard grayscale image
+#   4. hue: hue channel from the image after converting from rgb to hsv
+#   5. image_pixels (int): total number of pixels in the image
+#   6. debug (bol) (OPTIONAL): specifies if debug outputs should be generated
+#
+# Returns:
+#   1. edges: binary image showing the final detected edges
+#   2. outputs (dict): contains all other required and debug outputs
+    
+
+def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, debug=True):
+   
+    #Print update
+    if debug:
+        print('   Edge Detection:')
+        
+    #Initial edge detection parameters
+    gauss_size = (5,5)
+    gauss_std = 2;
+    canny_thresh1 = 100
+    canny_thresh2 = 200
+    edge_it = 0
+    edge_ratio_goal = 0.005 # 0.5% of total image area
+    edge_ratio_range = (0.0025, 0.0075)
+    edge_errors = []
+    edge_repeat = True
+    
+    #Iteratively refine edge detection until the proportion of edges falls into a prespecified range
+    while edge_repeat & (edge_it < 10):
+        
+        #Apply Gaussian Blur
+        hue_smooth = cv.GaussianBlur(hue, gauss_size, gauss_std)
+        rgb_min_smooth = cv.GaussianBlur(rgb_min, gauss_size, gauss_std)
+        gray_smooth = cv.GaussianBlur(gray, gauss_size, gauss_std)
+
+        #Canny edge detection
+        edges_rgb_min = cv.Canny(rgb_min_smooth, 0.5 * canny_thresh1, 0.5 * canny_thresh2)
+        edges_gray = cv.Canny(gray, canny_thresh1, canny_thresh2)
+        edges_hue = cv.Canny(hue_smooth, 25, 50)
+        
+        #Determine best edge source
+        edge_ratio_rgb_min = np.sum(edges_rgb_min)/(255 * image_pixels)
+        edge_ratio_gray = np.sum(edges_gray)/(255 * image_pixels)
+        edge_ratio_hue = np.sum(edges_hue)/(255 * image_pixels)
+            #edge_rndmns_rgb_min = 
+            #edge_rndmns_gray
+            #edge_rndmns_hue
+        edges = edges_gray  #TEMPORARY
+        edge_ratio = np.sum(edges)/(255 * image_pixels)
+        edge_percent = edge_ratio * 100
         
         
+        #Determine if the edge detection should be repeated and how the parameters should change
+        if (edge_ratio > edge_ratio_range[1]) | (edge_ratio < edge_ratio_range[0]):
+            
+            #Specify repeat and log error
+            edge_repeat = True
+            edge_error = edge_ratio - edge_ratio_goal
+            edge_errors.append(edge_error)
+            
+            #Update Parameters
+            edge_P = edge_ratio/edge_ratio_goal
+            edge_I = 0            
+            edge_D = 0
+            gauss_std = (edge_ratio/edge_ratio_goal) * gauss_std 
+            canny_thresh1 = (np.sqrt(edge_ratio/edge_ratio_goal) * canny_thresh1)
+            canny_thresh2 = (np.sqrt(edge_ratio/edge_ratio_goal) * canny_thresh2)
+            
+            #Print Update
+            if debug:
+                print(f'      ({edge_it}): Ratio = {edge_percent:.2f}%   -   ',\
+                      f'Gauss STD = {gauss_std:.2f}; Canny Thresh = {canny_thresh1:.2f}')
+                
+        else:
+            
+            #Specify not to repeat
+            edge_repeat = False
+            
+            #Print update
+            if debug:
+                print(f'      ({edge_it}): Ratio = {edge_percent:.2f}%')
+            
+        #Iterate iteration counter
+        edge_it = edge_it + 1
+    
+    #Define debug outputs
+    outputs = {'rgb_min_smooth': rgb_min_smooth, 'gray_smooth': gray_smooth, 'hue_smooth': hue_smooth, 'edges_rgb_min': edges_rgb_min, 'edges_gray': edges_gray, 'edges_hue': edges_hue}
+    
+    
+    #Define outputs
+    return edges, outputs
+
+
+
+def extendLine(line_points, xs, ys, debug=True):
+
+    #Rename line_points to l to simplify appearance
+    l = line_points
+    
+    #Calculate line coefficients and define lambda functions 
+    l_m = (l[3] - l[1])/(l[2] - l[0])
+    l_b = l[1] - (l_m * l[0])
+    x_func = lambda y: (y - l_b)/l_m
+    y_func = lambda x: x * l_m + l_b
+    
+    #Define new points - Edge case of vertical line
+    if (math.isinf(l_b)):                     
+        line_points_extended = [l[0], ys[0], l[2], ys[1]]
+    else:
+        if (xs is None) and (ys is not None):
+            line_points_extended = [int(x_func(ys[0])), ys[0], int(x_func(ys[1])),ys[1]]
+        elif (ys is None) and (xs is not None):
+            line_points_extended = [xs[0], int(y_func(xs[0])), xs[1], int(y_func(xs[1]))]
+        else:
+            raise ValueError('Inputs not valid. Must only specify the points for one axis (x or y)')
+                        
+    #Debug outputs
+    if False:
+        print(f'Line {l} extended to {line_points_extended}. Func is y = {l_m:.4f} * x + {l_b:.2f}')
         
-#def edgeDetection():
+    #Return output
+    return line_points_extended
+
+# lineDetection
+#
+# Scrip applying the hough transform to detect lines and store them in various forms for further processing
+#
+# Inputs:
+#   1. edges: binary image showing detected edges in the image
+#   2. rho (float32): rho parameter for hough transform
+#   3. theta
+#   4. threshold
+#   5. min_line_length
+#   6. max_line_gap
+#   7. debug (bol) (OPTIONAL): specifies if debug outputs should be generated
+#
+# Returns:
+#   1. lines
+#   2. line_points
+#   3. line_angles
+
+def lineDetection(edges, rho, theta, threshold, min_line_length, max_line_gap, resize_rows, resize_cols, debug=True):
+
+    #Apply probabilistic hough transform to detect lines for the given parameters
+    line_points = cv.HoughLinesP(edges, rho = rho, theta = theta, threshold = threshold, \
+                                   minLineLength = min_line_length, maxLineGap = max_line_gap)
+        
+    #Calculate additional line parameters and store them in a list of dicts
+    lines = []
+    line_angles = []
+    if line_points is not None:
+        for i in range(0, len(line_points)):
+            
+            #Calculate orientation
+            points = line_points[i][0]
+            angle_deg = np.arctan((points[3] - points[1])/(points[2]-points[0])) * 180/np.pi
+            length = np.sqrt((points[2] - points[0])**2 + (points[3] - points[1])**2)
+            
+            #Calculate edge intercepts for the lines
+            if (angle_deg <= 45) and (angle_deg >= -45):
+                points_edge = extendLine(points, [0, resize_rows], None, debug=True)
+            else:
+                points_edge = extendLine(points, None, [0, resize_cols], debug=True) 
+            
+            
+            
+            #Store in dict and then list
+            line = {'points': points, 'length': length, 'angle_deg': angle_deg, 'points_edge': points_edge}
+            lines.append(line)
+            line_angles.append(angle_deg)
+
+    #Define output
+    return lines, line_points, line_angles
+
+def filterLines(lines, line_points, line_angls, debug = True):
+    
+    #Convert to nparray for boolean indexing
+    line_angles = np.array(line_angles)
+    
+    #Identify horizontal lines
+    hori_angles = (line_angles >= -45) * (line_angles <= 45)
+    hori_lines = line_points[hori_angles]
+    hori_angles = line_angles[hori_angles]
+    
+    #Identify vertical lines and convert negative angles to positive ones
+    vert_angles = (line_angles < -45) + (line_angles > 45)
+    vert_lines = line_points[vert_angles]
+    vert_angles = line_angles[vert_angles]
+    vert_angles[vert_angles <=0] = vert_angles[vert_angles <=0] + 180  
+    
+    #Calculate statistics
+    vert_angles_mean = np.mean(vert_angles)
+    vert_angles_std = np.std(vert_angles)
+    hori_angles_mean = np.mean(hori_angles)
+    hori_angles_std = np.std(hori_angles)
+    
+    #Remove extreme outliers (i.e. std > 3)
+    max_std = 3
+    vert_angles_valid = (vert_angles <= (vert_angles_mean + max_std*vert_angles_std)), \
+        * (vert_angles >= (vert_angles_mean - max_std*vert_angles_std))
+    vert_angles = vert_angles[vert_angles_valid]
+    reject_lines = vert_lines[~vert_angles_valid]
+    vert_lines = vert_lines[vert_angles_valid]
+    hori_angles_valid = (hori_angles <= (hori_angles_mean + max_std*hori_angles_std)), \
+        * (hori_angles >= (hori_angles_mean - max_std*hori_angles_std))
+    hori_angles = hori_angles[hori_angles_valid]
+    reject_lines = np.concatenate((reject_lines, hori_lines[~hori_angles_valid]), 0)
+    hori_lines = hori_lines[hori_angles_valid]
+
+
+
+
+    #Remove redundant lines (i.e. those that are essentially overlapping)
+        #print(hori_lines)
+    angles_unique_thresh = 0.5 * hough_theta * 180/np.pi
+    hori_angles_unique = []
+    hori_lines_unique = []
+    hori_angles_groups = []
+    hori_lines_groups = []
+    for h in range(0, len(hori_lines)):
+
+        #Determine if the angle belongs to an existing group
+        hori_angle = hori_angles[h]
+        hori_angle_diff = [ang - hori_angle for ang in hori_angles_unique]
+        unique_angles = np.any([abs(diff) < angles_unique_thresh for diff in hori_angle_diff])
+        if not unique_angles:
+            hori_angles_unique.append(hori_angle)
+            hori_lines_unique.append(hori_lines[h])
+            hori_angles_groups.append([hori_angle])
+            hori_lines_groups.append([hori_lines[h]])
+        else:                         #Place the line in an existing group
+            min_ind = np.argmin(abs(np.asarray(hori_angle_diff)))
+            hori_angles_groups[min_ind].append(hori_angle)
+            hori_lines_groups[min_ind].append(hori_lines[h])
+
+
+    #print(hori_angles_unique)
+    #print(hori_angles_groups)
+    #x=y
+    #hori_angles = hori_angles_unique
+    #hori_lines = hori_lines_unique
+    #print(hori_lines)
+    
+    
+ 
+ 
+    
+    
+
+    
         
         
-        
-        
-#def lineDetection():
-        
-        
-        
-def calculateProjectiveTransform(vert_lines, hori_lines, gray_smooth, resize_rows, image_scalar, debug = False):
+def calculateProjectiveTransform(vert_lines, hori_lines, gray_smooth, resize_rows, image_scalar, debug = True):
     
     #Define variables
     proj_transforms = []
