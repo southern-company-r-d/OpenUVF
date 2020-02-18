@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import cv2 as cv
 import math
-
+import matplotlib.pyplot as plt
 
 
 # cell_segmentation
@@ -166,6 +166,31 @@ def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, debug=True):
     return edges, outputs
 
 
+def plotLines(image,vert_lines, hori_lines, reject_lines, all_lines=None):
+    
+    #Two plotting modes
+    if (all_lines is None):
+        
+        for i in range(0, len(vert_lines)):
+            l = vert_lines[i][0]
+            image = cv.line(image, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_8)
+        for i in range(0, len(hori_lines)):
+            l = hori_lines[i][0]
+            image = cv.line(image, (l[0], l[1]), (l[2], l[3]), (0,255,0), 3, cv.LINE_8)
+        for i in range(0, len(reject_lines)):
+            l = reject_lines[i][0]
+            image = cv.line(image, (l[0], l[1]), (l[2], l[3]), (255,0,0), 3, cv.LINE_8)  
+        
+    else:
+        
+        for i in range(0, len(all_lines)):
+            l = all_lines[i]
+            image = cv.line(image, (l[0], l[1]), (l[2], l[3]), (255,0,255), 3, cv.LINE_8)  
+        
+        
+    #Return statement
+    return image
+
 
 def extendLine(line_points, xs, ys, debug=True):
 
@@ -223,6 +248,7 @@ def lineDetection(edges, rho, theta, threshold, min_line_length, max_line_gap, r
     #Calculate additional line parameters and store them in a list of dicts
     lines = []
     line_angles = []
+    line_points_edge = []
     if line_points is not None:
         for i in range(0, len(line_points)):
             
@@ -233,80 +259,179 @@ def lineDetection(edges, rho, theta, threshold, min_line_length, max_line_gap, r
             
             #Calculate edge intercepts for the lines
             if (angle_deg <= 45) and (angle_deg >= -45):
-                points_edge = extendLine(points, [0, resize_rows], None, debug=True)
+                points_edge = extendLine(points, [0, resize_cols], None, debug=True)
+                orientation = 'horizontal'
             else:
-                points_edge = extendLine(points, None, [0, resize_cols], debug=True) 
-            
+                points_edge = extendLine(points, None, [0, resize_rows], debug=True) 
+                orientation = 'vertical'
+                if (angle_deg <= -45):
+                    angle_deg += 180
             
             
             #Store in dict and then list
-            line = {'points': points, 'length': length, 'angle_deg': angle_deg, 'points_edge': points_edge}
+            line = {'points': points, 'length': length, 'angle_deg': angle_deg, 'orientation': orientation, 'points_edge': points_edge}
             lines.append(line)
             line_angles.append(angle_deg)
+            line_points_edge.append(points_edge)
 
     #Define output
-    return lines, line_points, line_angles
+    return lines, line_points, line_points_edge, line_angles
 
-def filterLines(lines, line_points, line_angls, debug = True):
+
+def groupLines():
+    
+    x=y
+
+
+
+
+
+
+def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, debug = True):
+
+    
+    
+    #Convert index arrays to lists
+    vert_inds = list(vert_inds[0])
+    #hori_inds = hori_inds.tolist()
+    #reject_inds = reject_inds.tolist()
+    
+    #Look for outliers based on axis intercept and angle
+    x_intercepts = []
+    y_intercepts = []
+    vert_angles = []
+    hori_angles = []
+    vert_lines = []
+    hori_lines = []
+    for v in vert_inds:
+        
+        #Pull line and parameters
+        line = lines[v]
+        x_intercepts.append(line['points_edge'][0])
+        vert_angles.append(line['angle_deg'])
+        vert_lines.append(line['points'])
+        
+    for h in hori_inds:
+        
+        #Pull line and parameters
+        line = lines[h]
+        y_intercepts.append(line['points_edge'][0])
+        hori_angles.append(line['angle_deg'])
+        
+    #fig = plt.figure()
+    #plt.plot(x_intercepts, vert_angles, 'r.')
+    #plt.draw()
+    #fig.canvas.manager.window.raise_()
+    #plt.pause(0.01)
+    
+    #Filter out lines which diverge considerably from the fit curve.
+    
+    
+    #Filter lines which are close in angle - Only apply to vertical because of more considerable convergence.
+    angles_thresh = 0.5 * hough_theta * 180/np.pi
+    hough_angle_ct = round(np.pi/hough_theta) + 1
+    hough_angles = np.linspace(0, 180, hough_angle_ct)
+    vert_angles_unique = []
+    vert_lines_unique = []
+    vert_angles_groups = []
+    vert_lines_groups = []
+    for v in range(0, len(vert_angles)):
+
+        #Determine which discrete hough angle the line is associated with
+        vert_angle = vert_angles[v]
+        vert_angle_diff = [ang - vert_angle for ang in hough_angles]
+        min_diff_ind = np.argmin(abs(np.asarray(vert_angle_diff)))
+        hough_angle = hough_angles[min_diff_ind]
+        
+        #Place the line into its corresponding group
+        angle_present = np.any(np.asarray(vert_angles_unique) == hough_angle) 
+        if angle_present:
+            group_ind = np.where(np.asarray(vert_angles_unique) == hough_angle)
+            group_ind = group_ind[0][0]
+            print(group_ind)
+            vert_angles_groups[group_ind].append(vert_angle)
+            vert_lines_groups[group_ind].append(vert_lines[v])
+        else:
+            vert_angles_unique.append(hough_angle)
+            vert_angles_groups.append([vert_angle])
+            vert_lines_groups.append([vert_lines[v]])
+    
+    
+    #Choose lines which are most representive for unique angles 
+  #  for g in range(0, len(vert_angles_unique)):
+        
+        #Iterate through the lines in the group
+  #      for line in group:
+        
+            
+    
+    
+    #Look for overlapping lines
+    
+    
+    
+    
+    
+    #Define outputs
+    outputs = {'x_intercepts': x_intercepts, 'vert_angles': vert_angles}
+
+    #Return statement
+    return outputs
+
+
+
+def filterLines(lines, line_points, line_angles, hough_theta, debug = True):
     
     #Convert to nparray for boolean indexing
     line_angles = np.array(line_angles)
     
     #Identify horizontal lines
-    hori_angles = (line_angles >= -45) * (line_angles <= 45)
-    hori_lines = line_points[hori_angles]
-    hori_angles = line_angles[hori_angles]
+    hori_inds = np.where((line_angles >= -45) * (line_angles <= 45))
+    hori_lines = line_points[hori_inds]
+    hori_angles = line_angles[hori_inds]
+    hori_lengths = [lines[ind]['length'] for ind in hori_inds[0]]
     
     #Identify vertical lines and convert negative angles to positive ones
-    vert_angles = (line_angles < -45) + (line_angles > 45)
-    vert_lines = line_points[vert_angles]
-    vert_angles = line_angles[vert_angles]
+    vert_inds= np.where((line_angles < -45) + (line_angles > 45))
+    vert_lines = line_points[vert_inds]
+    vert_angles = line_angles[vert_inds]
     vert_angles[vert_angles <=0] = vert_angles[vert_angles <=0] + 180  
+    vert_lengths = [lines[ind]['length'] for ind in vert_inds[0]]
     
     #Calculate statistics
     vert_angles_mean = np.mean(vert_angles)
     vert_angles_std = np.std(vert_angles)
     hori_angles_mean = np.mean(hori_angles)
     hori_angles_std = np.std(hori_angles)
+    vert_lengths_mean = np.mean(vert_lengths)
+    vert_lengths_std = np.std(vert_lengths)
+    hori_lengths_mean = np.mean(hori_lengths)
+    hori_lengths_std = np.std(hori_lengths)
     
-    #Remove extreme outliers (i.e. std > 3)
-    max_std = 3
-    vert_angles_valid = (vert_angles <= (vert_angles_mean + max_std*vert_angles_std)), \
-        * (vert_angles >= (vert_angles_mean - max_std*vert_angles_std))
+    #Remove extreme outliers (i.e. std > 2)
+    max_std = 2
+    vert_angles_valid = (vert_angles <= (vert_angles_mean + max_std*vert_angles_std)) * (vert_angles >= (vert_angles_mean - \
+                                                                                                         max_std*vert_angles_std))
     vert_angles = vert_angles[vert_angles_valid]
     reject_lines = vert_lines[~vert_angles_valid]
     vert_lines = vert_lines[vert_angles_valid]
-    hori_angles_valid = (hori_angles <= (hori_angles_mean + max_std*hori_angles_std)), \
-        * (hori_angles >= (hori_angles_mean - max_std*hori_angles_std))
+    hori_angles_valid = (hori_angles <= (hori_angles_mean + max_std*hori_angles_std)) * (hori_angles >= (hori_angles_mean - \
+                                                                                                         max_std*hori_angles_std))
     hori_angles = hori_angles[hori_angles_valid]
     reject_lines = np.concatenate((reject_lines, hori_lines[~hori_angles_valid]), 0)
     hori_lines = hori_lines[hori_angles_valid]
 
-
+    #Remove redundant lines
+    hori_inds = []
+    reject_inds = []   #TEMPORARY
+    redundant_outputs = filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, debug = debug)
+    
+    
 
 
     #Remove redundant lines (i.e. those that are essentially overlapping)
         #print(hori_lines)
-    angles_unique_thresh = 0.5 * hough_theta * 180/np.pi
-    hori_angles_unique = []
-    hori_lines_unique = []
-    hori_angles_groups = []
-    hori_lines_groups = []
-    for h in range(0, len(hori_lines)):
-
-        #Determine if the angle belongs to an existing group
-        hori_angle = hori_angles[h]
-        hori_angle_diff = [ang - hori_angle for ang in hori_angles_unique]
-        unique_angles = np.any([abs(diff) < angles_unique_thresh for diff in hori_angle_diff])
-        if not unique_angles:
-            hori_angles_unique.append(hori_angle)
-            hori_lines_unique.append(hori_lines[h])
-            hori_angles_groups.append([hori_angle])
-            hori_lines_groups.append([hori_lines[h]])
-        else:                         #Place the line in an existing group
-            min_ind = np.argmin(abs(np.asarray(hori_angle_diff)))
-            hori_angles_groups[min_ind].append(hori_angle)
-            hori_lines_groups[min_ind].append(hori_lines[h])
+    
 
 
     #print(hori_angles_unique)
@@ -316,7 +441,13 @@ def filterLines(lines, line_points, line_angls, debug = True):
     #hori_lines = hori_lines_unique
     #print(hori_lines)
     
+    #Define additional outputs
+    outputs = {'vert_angles_mean': vert_angles_mean, 'vert_angles_std': vert_angles_std, 'hori_angles_mean': hori_angles_mean, \
+               'hori_angles_std': hori_angles_std}
     
+    
+    #Define outputs
+    return vert_lines, vert_angles, hori_lines, hori_angles, reject_lines, outputs 
  
  
     
