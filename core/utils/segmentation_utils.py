@@ -19,7 +19,7 @@ import pandas as pd
 import cv2 as cv
 import math
 import matplotlib.pyplot as plt
-
+from random import sample
 
 # cell_segmentation
 #
@@ -171,15 +171,15 @@ def plotLines(image,vert_lines, hori_lines, reject_lines, all_lines=None):
     #Two plotting modes
     if (all_lines is None):
         
-        for i in range(0, len(vert_lines)):
-            l = vert_lines[i]
-            image = cv.line(image, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_8)
+        for i in range(0, len(reject_lines)):
+            l = reject_lines[i]
+            image = cv.line(image, (l[0], l[1]), (l[2], l[3]), (255,0,0), 3, cv.LINE_8)          
         for i in range(0, len(hori_lines)):
             l = hori_lines[i]
             image = cv.line(image, (l[0], l[1]), (l[2], l[3]), (0,255,0), 3, cv.LINE_8)
-        for i in range(0, len(reject_lines)):
-            l = reject_lines[i]
-            image = cv.line(image, (l[0], l[1]), (l[2], l[3]), (255,0,0), 3, cv.LINE_8)  
+        for i in range(0, len(vert_lines)):
+            l = vert_lines[i]
+            image = cv.line(image, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv.LINE_8)
         
     else:
         
@@ -450,6 +450,7 @@ def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, 
         max_ind = inds[max_length]
         
         #Define the line to use
+        vert_inds.append(max_ind)
         vert_lines.append(group_lines[max_length].tolist())
         vert_angles.append(angles[max_length])
         
@@ -458,7 +459,8 @@ def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, 
             if ind != max_ind:
                 reject_inds.append(ind)
 
-        
+     
+
     #Calculate inter-line distance for remaining valid lines
     valid_inds = vert_inds + hori_inds
     
@@ -467,7 +469,7 @@ def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, 
     if len(hori_lines) > 10:
         
         #Group y intercepts of the horizontal lines using a histogram (to ensure adequate representation)
-        y_intercept_hist, hist_edges = np.histogram(y_intercepts, bins=10)
+        y_intercept_hist, hist_edges = np.histogram(y_intercepts, bins=15)
         
         #Iterate through bins and compile the properties of the lines in each bin
         bin_angles = []
@@ -481,14 +483,101 @@ def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, 
             upper = hist_edges[b+1]
             lower = hist_edges[b]
             lines_within = np.where((y_intercepts >= lower) * (y_intercepts < upper))
-            lines_within = lines_within[0]
+            lines_within = lines_within[0]            
             bin_lines.append([hori_lines[ind] for ind in lines_within])
             
             #Define corresponding line properties
-            
-            
+            bin_inds.append([hori_inds[ind] for ind in lines_within])
+            bin_lengths.append([lines[ind]['length'] for ind in bin_inds[b]])
+            bin_intercepts.append([y_intercepts[ind] for ind in lines_within])
+            bin_angles.append([hori_angles[ind] for ind in lines_within])
+       
     
-    #Compile reject lines
+        #Calculate aggregates for the line groups
+        bin_mean_lengths = []
+        bin_std_lengths = []
+        bin_mean_intercepts = []
+        bin_std_intercepts = []
+        bin_mean_angles = []
+        bin_std_angles = []
+        bin_lengths_diff = []
+        bin_intercepts_diff = []
+        bin_angles_diff = []
+        bin_lengths_order = []
+        bin_intercepts_order = []
+        bin_angles_order = []
+        for i in range(0, len(bin_inds)):
+            
+            #Calculate aggregates
+            bin_mean_lengths.append(np.mean(bin_lengths[i]))
+            bin_std_lengths.append(np.std(bin_lengths[i]))
+            bin_mean_intercepts.append(np.mean(bin_intercepts[i]))
+            bin_std_intercepts.append(np.std(bin_intercepts[i]))
+            bin_mean_angles.append(np.mean(bin_angles[i]))
+            bin_std_angles.append(np.std(bin_angles[i]))
+            
+            #Calculate difference of each line from the aggregate for the group
+            bin_lengths_diff.append([np.abs(bin_mean_lengths[i] - length) for length in bin_lengths[i]]) 
+            bin_intercepts_diff.append([np.abs(bin_mean_intercepts[i] - intercept) for intercept in bin_intercepts[i]]) 
+            bin_angles_diff.append([np.abs(bin_mean_angles[i] - angle) for angle in bin_angles[i]])
+            
+            #Calculate order of lines for each parameter
+            bin_lengths_order.append(np.argsort(-1 * np.asarray(bin_lengths[i])))   #NEED TO UPDATE
+            bin_intercepts_order.append(np.argsort(bin_intercepts_diff[i]))
+            bin_angles_order.append(np.argsort(bin_angles_diff[i]))
+        
+        
+        
+        #print(-1 * np.asarray(bin_lengths[i])), print(bin_lengths_order), print(bin_angles_order), print(bin_intercepts_order)
+        
+        #Calculate rating of each line to selet the representative line
+        bin_line_rankings = []
+        hori_lines = []
+        hori_inds = []
+        for i in range(0, len(bin_inds)):
+            
+            if len(bin_angles_order[i] > 0):
+            
+                #Calculate line rankings
+                bin_line_ranking = 0.45 * bin_angles_order[i] + 0.35 * bin_intercepts_order[i]
+                                   #+ 0.0 * bin_lengths_order[i]
+                bin_line_rankings.append(list(bin_line_ranking))
+
+                #Define the horizontal output lines to be the line with the lowest ranking 
+                best_line_ind = np.argmin(bin_line_ranking)
+                hori_inds.append(bin_inds[i][best_line_ind])
+                hori_lines.append(bin_lines[i][best_line_ind])
+                
+                #Record rejected indecies
+                for ind in bin_inds[i]:
+                    if ind != bin_inds[i][best_line_ind]:
+                        reject_inds.append(ind)
+                   
+        
+        
+        
+        
+        #print(bin_mean_intercepts), print(bin_mean_angles)
+        
+        #print(bin_lengths_diff), print(bin_angles_diff), print(bin_intercepts_diff)
+        
+        
+        
+        
+        
+        
+      
+        
+        #Select the most representative line from the group
+    #    for b in range(0,len(bin_inds)):
+     #       bin_length_diff = [bin_mean_intercepts[b] - 
+     #       bin_intercept_diff
+   #         bin_angle_diff = 1
+        
+        
+        
+        
+    #Compile all values
     reject_lines = []
     for ind in reject_inds:
         reject_lines.append(lines[ind]['points'])
@@ -496,9 +585,9 @@ def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, 
     
     #Define outputs
     outputs = {'x_intercepts': x_intercepts, 'vert_angles': vert_angles, 'y_intercepts': y_intercepts, 'hori_angles': hori_angles}
-
+    
     #Return statement
-    return vert_lines, vert_angles, hori_lines, hori_angles, reject_lines, outputs
+    return vert_inds, vert_lines, vert_angles, hori_inds, hori_lines, hori_angles, reject_inds, reject_lines, outputs
 
 
 
@@ -546,16 +635,16 @@ def filterLines(lines, line_points, line_angles, hough_theta, debug = True):
     hori_lines = hori_lines[hori_angles_valid]
 
     #Remove redundant lines
-    vert_lines, vert_angles, hori_lines, hori_angles, reject_lines,redundant_outputs \
+    vert_inds, vert_lines, vert_angles, hori_inds, hori_lines, hori_angles, reject_inds, reject_lines, redundant_outputs \
         = filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, debug = debug)
     
     #Define additional outputs
     outputs = {'vert_angles_mean': vert_angles_mean, 'vert_angles_std': vert_angles_std, 'hori_angles_mean': hori_angles_mean, \
-               'hori_angles_std': hori_angles_std}
+               'hori_angles_std': hori_angles_std, 'redundant_outputs': redundant_outputs}
     
     
     #Define outputs
-    return vert_lines, vert_angles, hori_lines, hori_angles, reject_lines, outputs 
+    return vert_inds, vert_lines, vert_angles, hori_inds, hori_lines, hori_angles, reject_inds, reject_lines, outputs 
  
  
     
@@ -564,7 +653,15 @@ def filterLines(lines, line_points, line_angles, hough_theta, debug = True):
     
         
         
-def calculateProjectiveTransform(vert_lines, hori_lines, gray_smooth, resize_rows, image_scalar, debug = True):
+def calculateProjectiveTransform(lines, vert_inds, hori_inds, gray_smooth, resize_rows, image_scalar, sample_ct=3, debug = True):
+    
+    #TEMPORARY
+    debug = False
+    
+    #Randomly sample from the lists
+    vert_lines = [lines[ind] for ind in sample(vert_inds,sample_ct)]
+    hori_lines = [lines[ind] for ind in sample(hori_inds, sample_ct)]
+
     
     #Define variables
     proj_transforms = []
@@ -572,30 +669,50 @@ def calculateProjectiveTransform(vert_lines, hori_lines, gray_smooth, resize_row
     #Iterate through all pairs
     it = 0
     for a in range(0, len(vert_lines)):
-        l1 = vert_lines[a][0]
+        vl1 = vert_lines[a]
         for b in [x for x in range(0, len(vert_lines)) if x != a]:
-            l2 = vert_lines[b][0]
+            vl2 = vert_lines[b]
             for c in range(0, len(hori_lines)):
-                l3 = hori_lines[c][0]
+                hl1 = hori_lines[c]
                 for d in [x for x in range(0, len(hori_lines)) if x != c]:
         
                     #Pull second horizontal line
-                    l4 = hori_lines[d][0]
+                    hl2 = hori_lines[d]
+                    
+                    #Pull the edge intercept points (where lines span full lenth of image)
+                    l1 = vl1['points_edge']
+                    l2 = vl2['points_edge']
+                    l3 = hl1['points_edge']
+                    l4 = hl2['points_edge']
+                    
+                    
                     
                     #Redefine them to span entire image
-                        #l1 = vert_lines_samples[0][0]
-                    l1_m = (l1[3] - l1[1])/(l1[2] - l1[0])
-                    l1_b = l1[1] - (l1_m * l1[0])
-                    l1_func = lambda y: (y - l1_b)/l1_m
-                    l1 = [int(l1_func(resize_rows)), resize_rows, int(l1_func(0)),0]
-
+                    if (l1[2] == l1[0]):
+                        l1_m = float('inf')
+                        l1_b = None
+                        l1_func = lambda y: l1[0]
+                        l1 = [l1[0], resize_rows, l1[2], 0]
+                        print(f'      Line 1 - Coords = {l1}')
+                    else:
+                        l1_m = (l1[3] - l1[1])/(l1[2] - l1[0])
+                        l1_b = l1[1] - (l1_m * l1[0])
+                        l1_func = lambda y: (y - l1_b)/l1_m
+                        l1 = [int(l1_func(resize_rows)), resize_rows, int(l1_func(0)),0]
+                        print(f'      Line 1 - Coords = {l1}')
                         #l2 = vert_lines_samples[1][0]
-                    l2_m = (l2[3] - l2[1])/(l2[2] - l2[0])
-                    l2_b = l2[1] - (l2_m * l2[0])
-                    l2_func = lambda y: (y - l2_b)/l2_m
-                    l2 = [int(l2_func(resize_rows)), resize_rows, int(l2_func(0)),0]
+                    if (l2[2] == l2[0]):
+                        l2_m = float('inf')
+                        l2_b = None
+                        l2_func = lambda y: l1[0]
+                        l2 = [l2[0], resize_rows, l2[2], 0]
+                    else:
+                        l2_m = (l2[3] - l2[1])/(l2[2] - l2[0])
+                        l2_b = l2[1] - (l2_m * l2[0])
+                        l2_func = lambda y: (y - l2_b)/l2_m
+                        l2 = [int(l2_func(resize_rows)), resize_rows, int(l2_func(0)),0]
 
-                        #l3 = hori_lines_samples[0][0]
+                    
                     l3_m = (l3[3] - l3[1])/(l3[2] - l3[0])
                     l3_b = l3[1] - (l3_m * l3[0])
                     l3_func = lambda y: (y - l3_b)/l3_m
@@ -620,10 +737,21 @@ def calculateProjectiveTransform(vert_lines, hori_lines, gray_smooth, resize_row
                     l2_ang = np.arctan(l2_m) * 180/np.pi
                     l3_ang = np.arctan(l3_m) * 180/np.pi
                     l4_ang = np.arctan(l4_m) * 180/np.pi
-                    l1l3_x = (l3_b - l1_b)/(l1_m - l3_m)
-                    l1l4_x = (l4_b - l1_b)/(l1_m - l4_m)
-                    l2l3_x = (l3_b - l2_b)/(l2_m - l3_m)
-                    l2l4_x = (l4_b - l2_b)/(l2_m - l4_m)
+                    if l1[2] == l1[0]:
+                        l1l3_x = l1[0]
+                        l1l4_x = l1[0]
+                        l2l3_x = (l3_b - l2_b)/(l2_m - l3_m)
+                        l2l4_x = (l4_b - l2_b)/(l2_m - l4_m)
+                    if l2[2] == l2[0]:
+                        l2l3_x = l2[0]
+                        l2l4_x = l2[0]   
+                        l2l3_x = (l3_b - l2_b)/(l2_m - l3_m)
+                        l2l4_x = (l4_b - l2_b)/(l2_m - l4_m)
+                    else:
+                        l1l3_x = (l3_b - l1_b)/(l1_m - l3_m)
+                        l1l4_x = (l4_b - l1_b)/(l1_m - l4_m)
+                        l2l3_x = (l3_b - l2_b)/(l2_m - l3_m)
+                        l2l4_x = (l4_b - l2_b)/(l2_m - l4_m)
                     l1l3_y = l1_m * l1l3_x + l1_b
                     l1l4_y = l1_m * l1l4_x + l1_b
                     l2l3_y = l2_m * l2l3_x + l2_b
@@ -720,7 +848,18 @@ def calculateProjectiveTransform(vert_lines, hori_lines, gray_smooth, resize_row
                     moving_pts = (1/image_scalar) * moving_pts
                     fixed_pts = (1/image_scalar) * np.float32([[l1l3_pt], [l1l4_new_pt], [l2l3_pt], [l2l4_new_pt]]) 
                     proj_trans = cv.getPerspectiveTransform(moving_pts, fixed_pts)
-                    proj_transforms.append(proj_trans)
+                    proj_trans = np.asarray(proj_trans)
+                    
+                    
+                    #Store Transform
+                    if it == 0:
+                        proj_transforms.append(proj_trans)
+                    else:
+                        
+                        proj_transforms.append(proj_trans)
+                    
+                    
+                    #proj_transforms.append(proj_trans)
         
         
         
@@ -728,7 +867,12 @@ def calculateProjectiveTransform(vert_lines, hori_lines, gray_smooth, resize_row
                     it += 1
         
     #Calculate mean projective transform
-    return proj_transforms    
+    
+    
+    #Define outputs
+    proj_transforms = proj_trans
+    rot_ang = l3_ang
+    return proj_transforms, rot_ang    
         
 #def correctPerspective():
     
