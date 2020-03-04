@@ -166,6 +166,12 @@ def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, debug=True):
     return edges, outputs
 
 
+def correctDistortion(debug=True):
+    
+    x=y
+
+
+
 def plotLines(image,vert_lines, hori_lines, reject_lines, all_lines=None):
     
     #Two plotting modes
@@ -261,8 +267,8 @@ def lineDetection(edges, rho, theta, threshold, min_line_length, max_line_gap, r
                 slope = float('inf') 
                 y_intercept = None
             else:
-                angle_deg = np.arctan((points[3] - points[1])/(points[2]-points[0])) * 180/np.pi
-                slope = np.tan(angle_deg)
+                slope = (points[3] - points[1])/(points[2]-points[0])
+                angle_deg = np.arctan(slope) * 180/np.pi
                 y_intercept = points[1] - (slope * points[0])
             
             #Calculate additional parameters
@@ -295,12 +301,42 @@ def lineDetection(edges, rho, theta, threshold, min_line_length, max_line_gap, r
 def groupLines():
     
     x=y
-
+    
+    
+def calculateLineIntercept(l1, l2, hough_theta, debug = True):
+    
+    #Pull parameters
+    l1m = l1['slope']
+    l1b = l1['y_intercept']
+    l2m = l2['slope']
+    l2b = l2['y_intercept']
+    
+    #Calculate intercepts
+    if (l1m != l2m):         #Account for parallel lines
+        
+        #Break solution into 5 cases
+        if (l1b is None):
+            l1l2_x = l1['points'][0]
+            l1l2_y = l2m * l1l2_x + l2b            
+        elif (l2b is None):
+            l1l2_x = l2['points'][0]
+            l1l2_y = l1m * l1l2_x + l1b             
+        else:
+            l1l2_x = (l2b - l1b)/(l1m - l2m)
+            l1l2_y = l1m * l1l2_x + l1b
+            
+            
+    else: #No intercept
+        l1l2_x = None
+        l1l2_y = None
+    
+    #Return outputs
+    return l1l2_x, l1l2_y
 
 
 def calculateVanishingPoints(debug=True):
     
-    #Iterate through all line pairs and determine approximate vanishing points
+    #Calculate Vertical Vanishing Point
     vert_vanish_pts = []
     vert_vanish_xs = []
     vert_vanish_ys = []
@@ -323,6 +359,8 @@ def calculateVanishingPoints(debug=True):
                     #print(vp_x), print(vp_y)
                 #POSSIBLE DIVIDE BY ZERO ERROR
     vert_vanish_pt = [np.nanmean(vert_vanish_xs), np.nanmean(vert_vanish_ys)]
+    
+    #Calculate Horizontal Vanishing Point (First Determine if it can be reasonably found)
     hori_vanish_pts = []
     hori_vanish_xs = []
     hori_vanish_ys = []
@@ -649,14 +687,9 @@ def filterLines(lines, line_points, line_angles, hough_theta, debug = True):
  
     
     
-
     
         
-        
-def calculateProjectiveTransform(lines, vert_inds, hori_inds, gray_smooth, resize_rows, image_scalar, sample_ct=3, debug = True):
-    
-    #TEMPORARY
-    debug = False
+def calculateProjectiveTransform(lines, vert_inds, hori_inds, gray_smooth, resize_rows, image_scalar, hough_theta, sample_ct=5, debug = True):
     
     #Randomly sample from the lists
     vert_lines = [lines[ind] for ind in sample(vert_inds,sample_ct)]
@@ -685,44 +718,53 @@ def calculateProjectiveTransform(lines, vert_inds, hori_inds, gray_smooth, resiz
                     l3 = hl1['points_edge']
                     l4 = hl2['points_edge']
                     
+                    #Pull line parameters
+                    l1_m = vl1['slope']
+                    l1_b = vl1['y_intercept']
+                    l2_m = vl2['slope']
+                    l2_b = vl2['y_intercept']
+                    l3_m = hl1['slope']
+                    l3_b = hl1['y_intercept']
+                    l4_m = hl2['slope']
+                    l4_b = hl2['y_intercept']
                     
                     
                     #Redefine them to span entire image
-                    if (l1[2] == l1[0]):
-                        l1_m = float('inf')
-                        l1_b = None
-                        l1_func = lambda y: l1[0]
-                        l1 = [l1[0], resize_rows, l1[2], 0]
-                        print(f'      Line 1 - Coords = {l1}')
-                    else:
-                        l1_m = (l1[3] - l1[1])/(l1[2] - l1[0])
-                        l1_b = l1[1] - (l1_m * l1[0])
-                        l1_func = lambda y: (y - l1_b)/l1_m
-                        l1 = [int(l1_func(resize_rows)), resize_rows, int(l1_func(0)),0]
-                        print(f'      Line 1 - Coords = {l1}')
-                        #l2 = vert_lines_samples[1][0]
-                    if (l2[2] == l2[0]):
-                        l2_m = float('inf')
-                        l2_b = None
-                        l2_func = lambda y: l1[0]
-                        l2 = [l2[0], resize_rows, l2[2], 0]
-                    else:
-                        l2_m = (l2[3] - l2[1])/(l2[2] - l2[0])
-                        l2_b = l2[1] - (l2_m * l2[0])
-                        l2_func = lambda y: (y - l2_b)/l2_m
-                        l2 = [int(l2_func(resize_rows)), resize_rows, int(l2_func(0)),0]
+                #    if (l1[2] == l1[0]):
+                #        l1_m = float('inf')
+                #        l1_b = None
+                #        l1_func = lambda y: l1[0]
+                #        l1 = [l1[0], resize_rows, l1[2], 0]
+                #        print(f'      Line 1 - Coords = {l1}')
+                #    else:
+                #        l1_m = (l1[3] - l1[1])/(l1[2] - l1[0])
+                #        l1_b = l1[1] - (l1_m * l1[0])
+                #        l1_func = lambda y: (y - l1_b)/l1_m
+                #        l1 = [int(l1_func(resize_rows)), resize_rows, int(l1_func(0)),0]
+                #        print(f'      Line 1 - Coords = {l1}')
+                #        #l2 = vert_lines_samples[1][0]
+                #    if (l2[2] == l2[0]):
+                ##        l2_m = float('inf')
+                #        l2_b = None
+                #        l2_func = lambda y: l1[0]
+                #        l2 = [l2[0], resize_rows, l2[2], 0]
+                #    else:
+                #        l2_m = (l2[3] - l2[1])/(l2[2] - l2[0])
+                #        l2_b = l2[1] - (l2_m * l2[0])
+                #        l2_func = lambda y: (y - l2_b)/l2_m
+                #        l2 = [int(l2_func(resize_rows)), resize_rows, int(l2_func(0)),0]
 
                     
-                    l3_m = (l3[3] - l3[1])/(l3[2] - l3[0])
-                    l3_b = l3[1] - (l3_m * l3[0])
-                    l3_func = lambda y: (y - l3_b)/l3_m
-                    l3 = [int(l3_func(resize_rows)), resize_rows, int(l3_func(0)),0]
+                    #l3_m = (l3[3] - l3[1])/(l3[2] - l3[0])
+                    #l3_b = l3[1] - (l3_m * l3[0])
+                    #l3_func = lambda y: (y - l3_b)/l3_m
+                    #l3 = [int(l3_func(resize_rows)), resize_rows, int(l3_func(0)),0]
 
                         #l4 = hori_lines_samples[1][0]
-                    l4_m = (l4[3] - l4[1])/(l4[2] - l4[0])
-                    l4_b = l4[1] - (l4_m * l1[0])
-                    l4_func = lambda y: (y - l4_b)/l4_m
-                    l4 = [int(l4_func(resize_rows)), resize_rows, int(l4_func(0)),0]
+                    #l4_m = (l4[3] - l4[1])/(l4[2] - l4[0])
+                    #l4_b = l4[1] - (l4_m * l1[0])
+                    #l4_func = lambda y: (y - l4_b)/l4_m
+                    #l4 = [int(l4_func(resize_rows)), resize_rows, int(l4_func(0)),0]
 
                     #Plot sampled perspective lines
                     if debug:
@@ -737,37 +779,47 @@ def calculateProjectiveTransform(lines, vert_inds, hori_inds, gray_smooth, resiz
                     l2_ang = np.arctan(l2_m) * 180/np.pi
                     l3_ang = np.arctan(l3_m) * 180/np.pi
                     l4_ang = np.arctan(l4_m) * 180/np.pi
-                    if l1[2] == l1[0]:
-                        l1l3_x = l1[0]
-                        l1l4_x = l1[0]
-                        l2l3_x = (l3_b - l2_b)/(l2_m - l3_m)
-                        l2l4_x = (l4_b - l2_b)/(l2_m - l4_m)
-                    if l2[2] == l2[0]:
-                        l2l3_x = l2[0]
-                        l2l4_x = l2[0]   
-                        l2l3_x = (l3_b - l2_b)/(l2_m - l3_m)
-                        l2l4_x = (l4_b - l2_b)/(l2_m - l4_m)
-                    else:
-                        l1l3_x = (l3_b - l1_b)/(l1_m - l3_m)
-                        l1l4_x = (l4_b - l1_b)/(l1_m - l4_m)
-                        l2l3_x = (l3_b - l2_b)/(l2_m - l3_m)
-                        l2l4_x = (l4_b - l2_b)/(l2_m - l4_m)
-                    l1l3_y = l1_m * l1l3_x + l1_b
-                    l1l4_y = l1_m * l1l4_x + l1_b
-                    l2l3_y = l2_m * l2l3_x + l2_b
-                    l2l4_y = l2_m * l2l4_x + l2_b
+                    l1l3_x, l1l3_y = calculateLineIntercept(vl1, hl1, hough_theta, debug)
+                    l1l4_x, l1l4_y = calculateLineIntercept(vl1, hl2, hough_theta, debug)
+                    l2l3_x, l2l3_y = calculateLineIntercept(vl2, hl1, hough_theta, debug)
+                    l2l4_x, l2l4_y = calculateLineIntercept(vl2, hl2, hough_theta, debug)
+                    
+                    
+                    
+                  #  if l1[2] == l1[0]:
+                  #      l1l3_x = l1[0]
+                  #      l1l4_x = l1[0]
+                  #      l2l3_x = (l3_b - l2_b)/(l2_m - l3_m)
+                  #      l2l4_x = (l4_b - l2_b)/(l2_m - l4_m)
+                  #  if l2[2] == l2[0]:
+                  #      l2l3_x = l2[0]
+                   #     l2l4_x = l2[0]   
+                  #      l2l3_x = (l3_b - l2_b)/(l2_m - l3_m)
+                  #      l2l4_x = (l4_b - l2_b)/(l2_m - l4_m)
+                  #  else:
+                  #      l1l3_x = (l3_b - l1_b)/(l1_m - l3_m)
+                  #      l1l4_x = (l4_b - l1_b)/(l1_m - l4_m)
+                  #      l2l3_x = (l3_b - l2_b)/(l2_m - l3_m)
+                  #      l2l4_x = (l4_b - l2_b)/(l2_m - l4_m)
+                  #  l1l3_y = l1_m * l1l3_x + l1_b
+                  #  l1l4_y = l1_m * l1l4_x + l1_b
+                  #  l2l3_y = l2_m * l2l3_x + l2_b
+                  #  l2l4_y = l2_m * l2l4_x + l2_b
+                
+                
+                
                     l1l3_pt = [l1l3_x, l1l3_y]
                     l1l4_pt = [l1l4_x, l1l4_y]
                     l2l3_pt = [l2l3_x, l2l3_y]
                     l2l4_pt = [l2l4_x, l2l4_y]
-                    l1_len = np.sqrt((l1l3_pt[1] - l1l4_pt[1])**2 + (l1l3_pt[0] - l1l4_pt[0])**2)
-                    l2_len = np.sqrt((l2l3_pt[1] - l2l4_pt[1])**2 + (l2l3_pt[0] - l2l4_pt[0])**2)
-                    l3_len = np.sqrt((l1l3_pt[1] - l2l3_pt[1])**2 + (l1l3_pt[0] - l2l3_pt[0])**2)
-                    l4_len = np.sqrt((l1l4_pt[1] - l2l4_pt[1])**2 + (l1l4_pt[0] - l2l4_pt[0])**2)
-                    l1l3_ang = np.arctan((l1l3_pt[1] - l1l4_pt[1])/(l1l3_pt[0] - l1l4_pt[0])) * 180/np.pi
-                    l1l4_ang = np.arctan((l2l3_pt[1] - l2l4_pt[1])/(l2l3_pt[0] - l2l4_pt[0])) * 180/np.pi
-                    l2l3_ang = np.arctan((l1l3_pt[1] - l2l3_pt[1])/(l1l3_pt[0] - l2l3_pt[0])) * 180/np.pi
-                    l2l4_ang = np.arctan((l1l4_pt[1] - l2l4_pt[1])/(l1l4_pt[0] - l2l4_pt[0])) * 180/np.pi
+                    #l1_len = np.sqrt((l1l3_pt[1] - l1l4_pt[1])**2 + (l1l3_pt[0] - l1l4_pt[0])**2)
+                    #l2_len = np.sqrt((l2l3_pt[1] - l2l4_pt[1])**2 + (l2l3_pt[0] - l2l4_pt[0])**2)
+                    #l3_len = np.sqrt((l1l3_pt[1] - l2l3_pt[1])**2 + (l1l3_pt[0] - l2l3_pt[0])**2)
+                    #l4_len = np.sqrt((l1l4_pt[1] - l2l4_pt[1])**2 + (l1l4_pt[0] - l2l4_pt[0])**2)
+                    #l1l3_ang = np.arctan((l1l3_pt[1] - l1l4_pt[1])/(l1l3_pt[0] - l1l4_pt[0])) * 180/np.pi
+                    #l1l4_ang = np.arctan((l2l3_pt[1] - l2l4_pt[1])/(l2l3_pt[0] - l2l4_pt[0])) * 180/np.pi
+                    #l2l3_ang = np.arctan((l1l3_pt[1] - l2l3_pt[1])/(l1l3_pt[0] - l2l3_pt[0])) * 180/np.pi
+                    #l2l4_ang = np.arctan((l1l4_pt[1] - l2l4_pt[1])/(l1l4_pt[0] - l2l4_pt[0])) * 180/np.pi
 
                     if debug:
                         gray_sample_lines = cv.circle(gray_sample_lines, (int(l1l3_x), int(l1l3_y)), 10, (255,255,255), thickness=-1)
@@ -799,6 +851,7 @@ def calculateProjectiveTransform(lines, vert_inds, hori_inds, gray_smooth, resiz
                     l2l4_new_pt = [l2l4_new_x, l2l4_new_y]
                     l2_new_box = l2l3_pt + l2l4_new_pt
                     if debug:
+                        #print(l1_box), print(l2_box),print(l3_box),print(l4_box), print(l2_new_box)
                         gray_sample_box = cv.line(gray_sample_box, (int(l2_new_box[0]), int(l2_new_box[1])), (int(l2_new_box[2]), int(l2_new_box[3])), (0,128,256), 3, cv.LINE_4)
                         gray_sample_box = cv.line(gray_sample_box, (int(l2l4_x), int(l2l4_y)), (int(l2_new_box[2]), int(l2_new_box[3])), (0,128,256), 3, cv.LINE_4)
 
@@ -866,13 +919,32 @@ def calculateProjectiveTransform(lines, vert_inds, hori_inds, gray_smooth, resiz
                     #Iteration counter
                     it += 1
         
-    #Calculate mean projective transform
+    #Select representative Projective Transform
+    print(proj_transforms)
+    proj_transform_means = np.zeros((3,3))
+    proj_transform_stds = np.zeros((3,3))
+    for r in range(0, 3):
+        for c in range(0, 3):
+            values = []
+            for i in range(0, it):
+                values.append(proj_transforms[i][r][c])
+                
+            #Calculate statistics for the list of projective transforms
+            proj_transform_means[r][c] = np.mean(values) 
+            proj_transform_stds[r][c] = np.std(values)
+            
+    print(proj_transform_means), print(proj_transform_stds)
     
+    x=y
+    
+    if not debug: 
+        gray_sample_lines = []
+        gray_sample_box = []
     
     #Define outputs
     proj_transforms = proj_trans
     rot_ang = l3_ang
-    return proj_transforms, rot_ang    
+    return proj_transform, rot_ang, gray_sample_lines, gray_sample_box    
         
 #def correctPerspective():
     
