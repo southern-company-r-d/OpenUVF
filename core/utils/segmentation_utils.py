@@ -334,54 +334,63 @@ def calculateLineIntercept(l1, l2, hough_theta, debug = True):
     return l1l2_x, l1l2_y
 
 
-def calculateVanishingPoints(debug=True):
+def calculateVanishingPoints(lines, vert_inds, hori_inds, hough_theta, debug=True):
+    
+    #Pull lines
+    vert_lines = lines[vert_inds]
+    hori_lines = lines[hori_inds]
     
     #Calculate Vertical Vanishing Point
     vert_vanish_pts = []
     vert_vanish_xs = []
     vert_vanish_ys = []
     for a in range(0, len(vert_lines)):
-        line1 = vert_lines[a]
+        l1 = vert_lines[a]
         for b in range(0, len(vert_lines)):
             if (b != a) and (abs(vert_angles[a] - vert_angles[b]) > 0.1):
-                line2 = vert_lines[b]
-                print(line2)
-                line1_m = (line1[3] - line1[1])/(line1[2] - line1[0])
-                line1_b = line1[1] - (line1_m * line1[0])
-                    #print(line1), print(line1_m), print(line1_b)
-                line2_m = (line2[3] - line2[1])/(line2[2] - line2[0])
-                line2_b = line2[1] - (line2_m * line2[0])
-                    #print(line2), print(line2_m), print(line2_b)
-                if (line1_m != line2_m) and (line1_b != line2_b):
-                    vert_vanish_xs.append((line2_b - line1_b)/(line1_m - line2_m))
-                    vert_vanish_ys.append(line1_m * vert_vanish_xs[-1] + line1_b)
-                    vert_vanish_pts.append([vert_vanish_xs[a], vert_vanish_ys[a]])
-                    #print(vp_x), print(vp_y)
-                #POSSIBLE DIVIDE BY ZERO ERROR
+                
+                #Pull comparison line
+                l2 = vert_lines[b]
+                
+                #Calculate line intersection
+                if (abs(l1['angle'] - l2['angle']) > hough_theta):
+                    x, y = calculateLineIntersection(l1, l2, hough_theta, debug=debug)
+                
+                    #Log the intersection if they exist
+                    if (x is not None) and (y is not None):
+                        vert_vanish_xs.append(x)
+                        vert_vanish_ys.append(y)
+                        vert_vanish_pts.append([x, y])
+
     vert_vanish_pt = [np.nanmean(vert_vanish_xs), np.nanmean(vert_vanish_ys)]
     
+    
+    #Determine if the horizontal lines will reasonably converge
+    
+    
+    
     #Calculate Horizontal Vanishing Point (First Determine if it can be reasonably found)
-    hori_vanish_pts = []
-    hori_vanish_xs = []
-    hori_vanish_ys = []
-    for a in range(0, len(hori_lines)):
-        line1 = hori_lines[a][0]
-        for b in range(0, len(hori_lines)):
-            if (b != a) and (abs(hori_angles[a] - hori_angles[b]) > 0.1):
-                line2 = hori_lines[b][0]
-                line1_m = (line1[3] - line1[1])/(line1[2] - line1[0])
-                line1_b = line1[1] - (line1_m * line1[0])
-                    #print(line1), print(line1_m), print(line1_b)
-                line2_m = (line2[3] - line2[1])/(line2[2] - line2[0])
-                line2_b = line2[1] - (line2_m * line2[0])
-                    #print(line2), print(line2_m), print(line2_b)
-                if (line1_m != line2_m) and (line1_b != line2_b):
-                    hori_vanish_xs.append((line2_b - line1_b)/(line1_m - line2_m))
-                    hori_vanish_ys.append(line1_m * hori_vanish_xs[-1] + line1_b)
-                    hori_vanish_pts.append([hori_vanish_xs[a], hori_vanish_ys[a]])
-                    #print(vp_x), print(vp_y)
-                #POSSIBLE DIVIDE BY ZERO ERROR
-    hori_vanish_pt = [np.nanmean(hori_vanish_xs), np.nanmean(hori_vanish_ys)]
+#    hori_vanish_pts = []
+#    hori_vanish_xs = []
+#    hori_vanish_ys = []
+#    for a in range(0, len(hori_lines)):
+#        line1 = hori_lines[a][0]
+#        for b in range(0, len(hori_lines)):
+#            if (b != a) and (abs(hori_angles[a] - hori_angles[b]) > 0.1):
+#                line2 = hori_lines[b][0]
+#                line1_m = (line1[3] - line1[1])/(line1[2] - line1[0])
+#                line1_b = line1[1] - (line1_m * line1[0])
+#                    #print(line1), print(line1_m), print(line1_b)
+#                line2_m = (line2[3] - line2[1])/(line2[2] - line2[0])
+#                line2_b = line2[1] - (line2_m * line2[0])
+#                    #print(line2), print(line2_m), print(line2_b)
+#                if (line1_m != line2_m) and (line1_b != line2_b):
+#                    hori_vanish_xs.append((line2_b - line1_b)/(line1_m - line2_m))
+#                    hori_vanish_ys.append(line1_m * hori_vanish_xs[-1] + line1_b)
+#                    hori_vanish_pts.append([hori_vanish_xs[a], hori_vanish_ys[a]])
+#                    #print(vp_x), print(vp_y)
+#                #POSSIBLE DIVIDE BY ZERO ERROR
+#    hori_vanish_pt = [np.nanmean(hori_vanish_xs), np.nanmean(hori_vanish_ys)]
         #print(hori_vanish_pt)
         
     #Return outputs
@@ -391,7 +400,99 @@ def filterOutlierLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, de
     
     x=y
 
+def histogramLineFilter(lines, line_points, line_angles, line_inds, ax_intercepts, reject_inds, bin_ct, debug=True):
+                        
+    #Group axis intercepts of the lines using a histogram (to ensure adequate representation)
+    ax_intercept_hist, hist_edges = np.histogram(ax_intercepts, bins=bin_ct)
 
+    #Iterate through bins and compile the properties of the lines in each bin
+    bin_angles = []
+    bin_intercepts = []
+    bin_lengths = []
+    bin_inds = []
+    bin_lines = []
+    for b in range(0, bin_ct):
+
+        #Pull lines with y_intercepts in the bin
+        upper = hist_edges[b+1]
+        lower = hist_edges[b]
+        lines_within = np.where((ax_intercepts >= lower) * (ax_intercepts < upper))
+        lines_within = lines_within[0]
+        bin_lines.append([line_points[ind] for ind in lines_within])
+
+        #Define corresponding line properties
+        bin_inds.append([line_inds[ind] for ind in lines_within])
+        bin_lengths.append([lines[ind]['length'] for ind in bin_inds[b]])
+        bin_intercepts.append([ax_intercepts[ind] for ind in lines_within])
+        bin_angles.append([line_angles[ind] for ind in lines_within])
+
+        
+    #Calculate aggregates for the line groups
+    bin_mean_lengths = []
+    bin_std_lengths = []
+    bin_mean_intercepts = []
+    bin_std_intercepts = []
+    bin_mean_angles = []
+    bin_std_angles = []
+    bin_lengths_diff = []
+    bin_intercepts_diff = []
+    bin_angles_diff = []
+    bin_lengths_order = []
+    bin_intercepts_order = []
+    bin_angles_order = []
+    for i in range(0, bin_ct):
+
+        #Calculate aggregates
+        bin_mean_lengths.append(np.mean(bin_lengths[i]))
+        bin_std_lengths.append(np.std(bin_lengths[i]))
+        bin_mean_intercepts.append(np.mean(bin_intercepts[i]))
+        bin_std_intercepts.append(np.std(bin_intercepts[i]))
+        bin_mean_angles.append(np.mean(bin_angles[i]))
+        bin_std_angles.append(np.std(bin_angles[i]))
+
+        #Calculate difference of each line from the aggregate for the group
+        bin_lengths_diff.append([np.abs(bin_mean_lengths[i] - length) for length in bin_lengths[i]]) 
+        bin_intercepts_diff.append([np.abs(bin_mean_intercepts[i] - intercept) for intercept in bin_intercepts[i]]) 
+        bin_angles_diff.append([np.abs(bin_mean_angles[i] - angle) for angle in bin_angles[i]])
+
+        #Calculate order of lines for each parameter
+        bin_lengths_order.append(np.argsort(-1 * np.asarray(bin_lengths[i])))   #NEED TO UPDATE
+        bin_intercepts_order.append(np.argsort(bin_intercepts_diff[i]))
+        bin_angles_order.append(np.argsort(bin_angles_diff[i]))
+
+
+
+    #print(-1 * np.asarray(bin_lengths[i])), print(bin_lengths_order), print(bin_angles_order), print(bin_intercepts_order)
+
+    #Calculate rating of each line to selet the representative line
+    bin_line_rankings = []
+    output_points = []
+    output_inds = []
+    output_intercepts = []
+    for i in range(0, len(bin_inds)):
+
+        if len(bin_angles_order[i] > 0):
+
+            #Calculate line rankings
+            bin_line_ranking = 0.45 * bin_angles_order[i] + 0.35 * bin_intercepts_order[i]
+                               #+ 0.0 * bin_lengths_order[i]
+            bin_line_rankings.append(list(bin_line_ranking))
+
+            #Define the horizontal output lines to be the line with the lowest ranking 
+            best_line_ind = np.argmin(bin_line_ranking)
+            output_inds.append(bin_inds[i][best_line_ind])
+            output_points.append(bin_lines[i][best_line_ind])
+            output_intercepts.append(bin_intercepts[i][best_line_ind])
+
+            #Record rejected indecies
+            for ind in bin_inds[i]:
+                if ind != bin_inds[i][best_line_ind]:
+                    reject_inds.append(ind)
+                   
+        
+    return output_points, output_inds, output_intercepts, reject_inds
+    
+    
 def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, debug = True):
  
     #Convert index arrays to lists
@@ -413,7 +514,9 @@ def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, 
         x_intercepts.append(line['points_edge'][0])
         vert_angles.append(line['angle_deg'])
         vert_lines.append(line['points'])
-        
+ 
+    
+    
     for h in hori_inds:
         
         #Pull line and parameters
@@ -477,11 +580,13 @@ def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, 
     vert_angles = []
     vert_lines = []
     vert_inds = []
+    x_intercepts = []
     for g in range(0, len(vert_angles_unique)):
         
         #Pull line groups and their corresponding lengths
         inds = vert_inds_groups[g]
         angles = vert_angles_groups[g]
+        intercepts = vert_intercept_groups[g]
         group_lines = vert_lines_groups[g]
         lengths = vert_lines_lengths[g]
         max_length = np.argmax(np.asarray(lengths))
@@ -491,6 +596,7 @@ def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, 
         vert_inds.append(max_ind)
         vert_lines.append(group_lines[max_length].tolist())
         vert_angles.append(angles[max_length])
+        x_intercepts.append(intercepts[max_length])
         
         #Store the reject lines
         for ind in inds:
@@ -504,92 +610,109 @@ def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, 
     
     
     #Look for overlapping lines
+    hist_bin_ct = 20
     if len(hori_lines) > 10:
         
+        #Filter horizontal lines - First round 
+        hori_lines, hori_inds, y_intercepts, reject_inds = histogramLineFilter(lines, hori_lines, hori_angles, hori_inds, y_intercepts,\
+                                                                 reject_inds, hist_bin_ct, debug=debug)
+        
+        #Filter horizontal lines - Second round 
+        hori_lines, hori_inds, y_intercepts, reject_inds = histogramLineFilter(lines, hori_lines, hori_angles, hori_inds, y_intercepts,\
+                                                                 reject_inds, 2, debug=debug)
+        
+        #Filter vertical lines - First round
+        vert_lines, vert_inds, x_intercepts, reject_inds = histogramLineFilter(lines, vert_lines, vert_angles, vert_inds, x_intercepts,\
+                                                                 reject_inds, hist_bin_ct, debug=debug)
+        
+        #Filter vertical lines - Second round
+        #vert_lines, vert_inds, x_intercepts, reject_inds = histogramLineFilter(lines, vert_lines, vert_angles, vert_inds, x_intercepts,\
+        #                                                         reject_inds, 2, debug=debug)
+        
         #Group y intercepts of the horizontal lines using a histogram (to ensure adequate representation)
-        y_intercept_hist, hist_edges = np.histogram(y_intercepts, bins=15)
+#        y_intercept_hist, hist_edges = np.histogram(y_intercepts, bins=15)
         
         #Iterate through bins and compile the properties of the lines in each bin
-        bin_angles = []
-        bin_intercepts = []
-        bin_lengths = []
-        bin_inds = []
-        bin_lines = []
-        for b in range(0, len(hist_edges) - 1):
+#        bin_angles = []
+#        bin_intercepts = []
+#        bin_lengths = []
+#        bin_inds = []
+#        bin_lines = []
+#        for b in range(0, len(hist_edges) - 1):
             
             #Pull lines with y_intercepts in the bin
-            upper = hist_edges[b+1]
-            lower = hist_edges[b]
-            lines_within = np.where((y_intercepts >= lower) * (y_intercepts < upper))
-            lines_within = lines_within[0]            
-            bin_lines.append([hori_lines[ind] for ind in lines_within])
+#            upper = hist_edges[b+1]
+#            lower = hist_edges[b]
+#            lines_within = np.where((y_intercepts >= lower) * (y_intercepts < upper))
+#            lines_within = lines_within[0]            
+ #           bin_lines.append([hori_lines[ind] for ind in lines_within])
             
             #Define corresponding line properties
-            bin_inds.append([hori_inds[ind] for ind in lines_within])
-            bin_lengths.append([lines[ind]['length'] for ind in bin_inds[b]])
-            bin_intercepts.append([y_intercepts[ind] for ind in lines_within])
-            bin_angles.append([hori_angles[ind] for ind in lines_within])
+#            bin_inds.append([hori_inds[ind] for ind in lines_within])
+#            bin_lengths.append([lines[ind]['length'] for ind in bin_inds[b]])
+#            bin_intercepts.append([y_intercepts[ind] for ind in lines_within])
+#            bin_angles.append([hori_angles[ind] for ind in lines_within])
        
     
         #Calculate aggregates for the line groups
-        bin_mean_lengths = []
-        bin_std_lengths = []
-        bin_mean_intercepts = []
-        bin_std_intercepts = []
-        bin_mean_angles = []
-        bin_std_angles = []
-        bin_lengths_diff = []
-        bin_intercepts_diff = []
-        bin_angles_diff = []
-        bin_lengths_order = []
-        bin_intercepts_order = []
-        bin_angles_order = []
-        for i in range(0, len(bin_inds)):
+#        bin_mean_lengths = []
+#        bin_std_lengths = []
+#        bin_mean_intercepts = []
+#        bin_std_intercepts = []
+#        bin_mean_angles = []
+#        bin_std_angles = []
+#        bin_lengths_diff = []
+#        bin_intercepts_diff = []
+#       bin_angles_diff = []
+#        bin_lengths_order = []
+#        bin_intercepts_order = []
+#        bin_angles_order = []
+#        for i in range(0, len(bin_inds)):
             
             #Calculate aggregates
-            bin_mean_lengths.append(np.mean(bin_lengths[i]))
-            bin_std_lengths.append(np.std(bin_lengths[i]))
-            bin_mean_intercepts.append(np.mean(bin_intercepts[i]))
-            bin_std_intercepts.append(np.std(bin_intercepts[i]))
-            bin_mean_angles.append(np.mean(bin_angles[i]))
-            bin_std_angles.append(np.std(bin_angles[i]))
+#            bin_mean_lengths.append(np.mean(bin_lengths[i]))
+#            bin_std_lengths.append(np.std(bin_lengths[i]))
+ #           bin_mean_intercepts.append(np.mean(bin_intercepts[i]))
+#            bin_std_intercepts.append(np.std(bin_intercepts[i]))
+#            bin_mean_angles.append(np.mean(bin_angles[i]))
+ #           bin_std_angles.append(np.std(bin_angles[i]))
             
             #Calculate difference of each line from the aggregate for the group
-            bin_lengths_diff.append([np.abs(bin_mean_lengths[i] - length) for length in bin_lengths[i]]) 
-            bin_intercepts_diff.append([np.abs(bin_mean_intercepts[i] - intercept) for intercept in bin_intercepts[i]]) 
-            bin_angles_diff.append([np.abs(bin_mean_angles[i] - angle) for angle in bin_angles[i]])
+#            bin_lengths_diff.append([np.abs(bin_mean_lengths[i] - length) for length in bin_lengths[i]]) 
+#            bin_intercepts_diff.append([np.abs(bin_mean_intercepts[i] - intercept) for intercept in bin_intercepts[i]]) 
+#            bin_angles_diff.append([np.abs(bin_mean_angles[i] - angle) for angle in bin_angles[i]])
             
             #Calculate order of lines for each parameter
-            bin_lengths_order.append(np.argsort(-1 * np.asarray(bin_lengths[i])))   #NEED TO UPDATE
-            bin_intercepts_order.append(np.argsort(bin_intercepts_diff[i]))
-            bin_angles_order.append(np.argsort(bin_angles_diff[i]))
+#            bin_lengths_order.append(np.argsort(-1 * np.asarray(bin_lengths[i])))   #NEED TO UPDATE
+ #           bin_intercepts_order.append(np.argsort(bin_intercepts_diff[i]))
+ #           bin_angles_order.append(np.argsort(bin_angles_diff[i]))
         
         
         
         #print(-1 * np.asarray(bin_lengths[i])), print(bin_lengths_order), print(bin_angles_order), print(bin_intercepts_order)
         
         #Calculate rating of each line to selet the representative line
-        bin_line_rankings = []
-        hori_lines = []
-        hori_inds = []
-        for i in range(0, len(bin_inds)):
+ #       bin_line_rankings = []
+#        hori_lines = []
+#        hori_inds = []
+#        for i in range(0, len(bin_inds)):
             
-            if len(bin_angles_order[i] > 0):
+#            if len(bin_angles_order[i] > 0):
             
                 #Calculate line rankings
-                bin_line_ranking = 0.45 * bin_angles_order[i] + 0.35 * bin_intercepts_order[i]
+#                bin_line_ranking = 0.45 * bin_angles_order[i] + 0.35 * bin_intercepts_order[i]
                                    #+ 0.0 * bin_lengths_order[i]
-                bin_line_rankings.append(list(bin_line_ranking))
+#                bin_line_rankings.append(list(bin_line_ranking))
 
                 #Define the horizontal output lines to be the line with the lowest ranking 
-                best_line_ind = np.argmin(bin_line_ranking)
-                hori_inds.append(bin_inds[i][best_line_ind])
-                hori_lines.append(bin_lines[i][best_line_ind])
+#                best_line_ind = np.argmin(bin_line_ranking)
+#                hori_inds.append(bin_inds[i][best_line_ind])
+ #               hori_lines.append(bin_lines[i][best_line_ind])
                 
                 #Record rejected indecies
-                for ind in bin_inds[i]:
-                    if ind != bin_inds[i][best_line_ind]:
-                        reject_inds.append(ind)
+#                for ind in bin_inds[i]:
+ #                   if ind != bin_inds[i][best_line_ind]:
+ #                       reject_inds.append(ind)
                    
         
         
@@ -689,7 +812,7 @@ def filterLines(lines, line_points, line_angles, hough_theta, debug = True):
     
     
         
-def calculateProjectiveTransform(lines, vert_inds, hori_inds, gray_smooth, resize_rows, image_scalar, hough_theta, sample_ct=5, debug = True):
+def calculateProjectiveTransform(lines, vert_inds, hori_inds, gray_smooth, resize_rows, image_scalar, hough_theta, sample_ct=2, debug = True):
     
     #Randomly sample from the lists
     vert_lines = [lines[ind] for ind in sample(vert_inds,sample_ct)]
@@ -920,7 +1043,6 @@ def calculateProjectiveTransform(lines, vert_inds, hori_inds, gray_smooth, resiz
                     it += 1
         
     #Select representative Projective Transform
-    print(proj_transforms)
     proj_transform_means = np.zeros((3,3))
     proj_transform_stds = np.zeros((3,3))
     for r in range(0, 3):
@@ -933,9 +1055,9 @@ def calculateProjectiveTransform(lines, vert_inds, hori_inds, gray_smooth, resiz
             proj_transform_means[r][c] = np.mean(values) 
             proj_transform_stds[r][c] = np.std(values)
             
-    print(proj_transform_means), print(proj_transform_stds)
-    
-    x=y
+    #print(proj_transform_means), print(proj_transform_stds)
+    proj_transform = proj_transform_means
+
     
     if not debug: 
         gray_sample_lines = []
