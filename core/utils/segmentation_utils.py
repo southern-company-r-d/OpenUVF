@@ -334,36 +334,53 @@ def calculateLineIntercept(l1, l2, hough_theta, debug = True):
     return l1l2_x, l1l2_y
 
 
-def calculateVanishingPoints(lines, vert_inds, hori_inds, hough_theta, debug=True):
+def calculateVanishingPoints(vanish_lines, inds, hough_theta, debug=True):
     
     #Pull lines
-    vert_lines = lines[vert_inds]
-    hori_lines = lines[hori_inds]
+    lines = [vanish_lines[ind] for ind in inds]
+    angles = [vanish_lines[ind]['angle_deg'] for ind in inds]
     
     #Calculate Vertical Vanishing Point
-    vert_vanish_pts = []
-    vert_vanish_xs = []
-    vert_vanish_ys = []
-    for a in range(0, len(vert_lines)):
-        l1 = vert_lines[a]
-        for b in range(0, len(vert_lines)):
-            if (b != a) and (abs(vert_angles[a] - vert_angles[b]) > 0.1):
+    vanish_pts = []
+    vanish_xs = []
+    vanish_ys = []
+    vanish_inds = []
+    for a in range(0, len(lines)):
+        l1 = lines[a]
+        for b in range(0, len(lines)):
+            if (b != a) and (abs(angles[a] - angles[b]) > 0.1):
                 
                 #Pull comparison line
-                l2 = vert_lines[b]
+                l2 = lines[b]
+                vanish_inds.append([inds[a],inds[b]])
                 
                 #Calculate line intersection
-                if (abs(l1['angle'] - l2['angle']) > hough_theta):
-                    x, y = calculateLineIntersection(l1, l2, hough_theta, debug=debug)
+                if (abs(l1['angle_deg'] - l2['angle_deg']) > hough_theta):
+                    x, y = calculateLineIntercept(l1, l2, hough_theta, debug=debug)
                 
                     #Log the intersection if they exist
                     if (x is not None) and (y is not None):
-                        vert_vanish_xs.append(x)
-                        vert_vanish_ys.append(y)
-                        vert_vanish_pts.append([x, y])
+                        vanish_xs.append(x)
+                        vanish_ys.append(y)
+                        vanish_pts.append([x, y])
 
-    vert_vanish_pt = [np.nanmean(vert_vanish_xs), np.nanmean(vert_vanish_ys)]
+    #Calculate mean vanishing point and filter outliers
+    mean_vanish_pt = [np.nanmean(vanish_xs), np.nanmean(vanish_ys)]
+    vanish_dists = []
+    for pt in vanish_pts:
+        
+        #Calculate distance of each vanishing point from the first order mean
+        dist = np.sqrt((pt[0] - mean_vanish_pt[0])**2 + (pt[1] - mean_vanish_pt[1])**2)
+        vanish_dists.append(dist)
+        
+    vanish_dists_mean = np.nanmean(vanish_dists)
+    vanish_dists_std = np.nanstd(vanish_dists)
+    valid_pairs = np.where((vanish_dists - vanish_dists_mean) < (1.5 * vanish_dists_std))
+    valid_xs = [vanish_xs[ind] for ind in valid_pairs[0]]
+    valid_ys = [vanish_ys[ind] for ind in valid_pairs[0]]
+    mean_vanish_pt = [np.nanmean(valid_xs), np.nanmean(valid_ys)]
     
+ 
     
     #Determine if the horizontal lines will reasonably converge
     
@@ -393,13 +410,51 @@ def calculateVanishingPoints(lines, vert_inds, hori_inds, hough_theta, debug=Tru
 #    hori_vanish_pt = [np.nanmean(hori_vanish_xs), np.nanmean(hori_vanish_ys)]
         #print(hori_vanish_pt)
         
-    #Return outputs
-    return x
+    #Return outputs  
+    return mean_vanish_pt, vanish_pts, vanish_xs, vanish_ys, vanish_inds 
+
+
+
+
+
+
+
+
+
+
+
+
 
 def filterOutlierLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, debug = True):
     
     x=y
 
+def vanishingPointLineFilter(lines, inds, reject_inds, hough_theta, pair_ct=1, debug=True):
+    
+    #Calculate vanishing points
+    vanish_pt, vanish_pts, vanish_xs, vanish_ys, vanish_inds = calculateVanishingPoints(lines, inds, hough_theta, debug=debug)
+    
+    #Calculate distance of the from the mean vanishing point to all others
+    vanish_dists = []
+    for pt in vanish_pts:
+        
+        #Calculate distance of each vanishing point from the first order mean
+        dist = np.sqrt((pt[0] - vanish_pt[0])**2 + (pt[1] - vanish_pt[1])**2)
+        vanish_dists.append(dist)
+    
+    #Select the line pair 
+    repr_inds = vanish_inds[np.argmin(vanish_dists)]
+    repr_lines = [lines[ind]['points'].tolist() for ind in repr_inds]
+    
+    #Update reject_inds
+    for ind in inds:
+        if ind not in repr_inds:
+            reject_inds.append(ind)
+    
+    #Define outputs
+    return repr_inds, repr_lines, vanish_pt, vanish_pts, vanish_xs, vanish_ys, vanish_inds, reject_inds 
+    
+    
 def histogramLineFilter(lines, line_points, line_angles, line_inds, ax_intercepts, reject_inds, bin_ct, debug=True):
                         
     #Group axis intercepts of the lines using a histogram (to ensure adequate representation)
@@ -609,7 +664,7 @@ def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, 
     valid_inds = vert_inds + hori_inds
     
     
-    #Look for overlapping lines
+    #Histogram filter to remove final overlapping lines
     hist_bin_ct = 20
     if len(hori_lines) > 10:
         
@@ -617,138 +672,19 @@ def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, 
         hori_lines, hori_inds, y_intercepts, reject_inds = histogramLineFilter(lines, hori_lines, hori_angles, hori_inds, y_intercepts,\
                                                                  reject_inds, hist_bin_ct, debug=debug)
         
-        #Filter horizontal lines - Second round 
-        hori_lines, hori_inds, y_intercepts, reject_inds = histogramLineFilter(lines, hori_lines, hori_angles, hori_inds, y_intercepts,\
-                                                                 reject_inds, 2, debug=debug)
-        
-        #Filter vertical lines - First round
+        #Filter vertical lines - First round histogram based
         vert_lines, vert_inds, x_intercepts, reject_inds = histogramLineFilter(lines, vert_lines, vert_angles, vert_inds, x_intercepts,\
                                                                  reject_inds, hist_bin_ct, debug=debug)
         
-        #Filter vertical lines - Second round
-        #vert_lines, vert_inds, x_intercepts, reject_inds = histogramLineFilter(lines, vert_lines, vert_angles, vert_inds, x_intercepts,\
-        #                                                         reject_inds, 2, debug=debug)
-        
-        #Group y intercepts of the horizontal lines using a histogram (to ensure adequate representation)
-#        y_intercept_hist, hist_edges = np.histogram(y_intercepts, bins=15)
-        
-        #Iterate through bins and compile the properties of the lines in each bin
-#        bin_angles = []
-#        bin_intercepts = []
-#        bin_lengths = []
-#        bin_inds = []
-#        bin_lines = []
-#        for b in range(0, len(hist_edges) - 1):
-            
-            #Pull lines with y_intercepts in the bin
-#            upper = hist_edges[b+1]
-#            lower = hist_edges[b]
-#            lines_within = np.where((y_intercepts >= lower) * (y_intercepts < upper))
-#            lines_within = lines_within[0]            
- #           bin_lines.append([hori_lines[ind] for ind in lines_within])
-            
-            #Define corresponding line properties
-#            bin_inds.append([hori_inds[ind] for ind in lines_within])
-#            bin_lengths.append([lines[ind]['length'] for ind in bin_inds[b]])
-#            bin_intercepts.append([y_intercepts[ind] for ind in lines_within])
-#            bin_angles.append([hori_angles[ind] for ind in lines_within])
-       
+     
     
-        #Calculate aggregates for the line groups
-#        bin_mean_lengths = []
-#        bin_std_lengths = []
-#        bin_mean_intercepts = []
-#        bin_std_intercepts = []
-#        bin_mean_angles = []
-#        bin_std_angles = []
-#        bin_lengths_diff = []
-#        bin_intercepts_diff = []
-#       bin_angles_diff = []
-#        bin_lengths_order = []
-#        bin_intercepts_order = []
-#        bin_angles_order = []
-#        for i in range(0, len(bin_inds)):
-            
-            #Calculate aggregates
-#            bin_mean_lengths.append(np.mean(bin_lengths[i]))
-#            bin_std_lengths.append(np.std(bin_lengths[i]))
- #           bin_mean_intercepts.append(np.mean(bin_intercepts[i]))
-#            bin_std_intercepts.append(np.std(bin_intercepts[i]))
-#            bin_mean_angles.append(np.mean(bin_angles[i]))
- #           bin_std_angles.append(np.std(bin_angles[i]))
-            
-            #Calculate difference of each line from the aggregate for the group
-#            bin_lengths_diff.append([np.abs(bin_mean_lengths[i] - length) for length in bin_lengths[i]]) 
-#            bin_intercepts_diff.append([np.abs(bin_mean_intercepts[i] - intercept) for intercept in bin_intercepts[i]]) 
-#            bin_angles_diff.append([np.abs(bin_mean_angles[i] - angle) for angle in bin_angles[i]])
-            
-            #Calculate order of lines for each parameter
-#            bin_lengths_order.append(np.argsort(-1 * np.asarray(bin_lengths[i])))   #NEED TO UPDATE
- #           bin_intercepts_order.append(np.argsort(bin_intercepts_diff[i]))
- #           bin_angles_order.append(np.argsort(bin_angles_diff[i]))
-        
-        
-        
-        #print(-1 * np.asarray(bin_lengths[i])), print(bin_lengths_order), print(bin_angles_order), print(bin_intercepts_order)
-        
-        #Calculate rating of each line to selet the representative line
- #       bin_line_rankings = []
-#        hori_lines = []
-#        hori_inds = []
-#        for i in range(0, len(bin_inds)):
-            
-#            if len(bin_angles_order[i] > 0):
-            
-                #Calculate line rankings
-#                bin_line_ranking = 0.45 * bin_angles_order[i] + 0.35 * bin_intercepts_order[i]
-                                   #+ 0.0 * bin_lengths_order[i]
-#                bin_line_rankings.append(list(bin_line_ranking))
-
-                #Define the horizontal output lines to be the line with the lowest ranking 
-#                best_line_ind = np.argmin(bin_line_ranking)
-#                hori_inds.append(bin_inds[i][best_line_ind])
- #               hori_lines.append(bin_lines[i][best_line_ind])
-                
-                #Record rejected indecies
-#                for ind in bin_inds[i]:
- #                   if ind != bin_inds[i][best_line_ind]:
- #                       reject_inds.append(ind)
-                   
-        
-        
-        
-        
-        #print(bin_mean_intercepts), print(bin_mean_angles)
-        
-        #print(bin_lengths_diff), print(bin_angles_diff), print(bin_intercepts_diff)
-        
-        
-        
-        
-        
-        
-      
-        
-        #Select the most representative line from the group
-    #    for b in range(0,len(bin_inds)):
-     #       bin_length_diff = [bin_mean_intercepts[b] - 
-     #       bin_intercept_diff
-   #         bin_angle_diff = 1
-        
-        
-        
-        
-    #Compile all values
-    reject_lines = []
-    for ind in reject_inds:
-        reject_lines.append(lines[ind]['points'])
     
     
     #Define outputs
     outputs = {'x_intercepts': x_intercepts, 'vert_angles': vert_angles, 'y_intercepts': y_intercepts, 'hori_angles': hori_angles}
     
     #Return statement
-    return vert_inds, vert_lines, vert_angles, hori_inds, hori_lines, hori_angles, reject_inds, reject_lines, outputs
+    return vert_inds, vert_lines, vert_angles, hori_inds, hori_lines, hori_angles, reject_inds, y_intercepts, outputs
 
 
 
@@ -796,277 +732,256 @@ def filterLines(lines, line_points, line_angles, hough_theta, debug = True):
     hori_lines = hori_lines[hori_angles_valid]
 
     #Remove redundant lines
-    vert_inds, vert_lines, vert_angles, hori_inds, hori_lines, hori_angles, reject_inds, reject_lines, redundant_outputs \
+    vert_inds, vert_lines, vert_angles, hori_inds, hori_lines, hori_angles, reject_inds, y_intercepts, redundant_outputs \
         = filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, debug = debug)
+    
+    #Select representative horizontal lines
+    hori_lines, hori_inds, y_intercepts, reject_inds = histogramLineFilter(lines, hori_lines, hori_angles, hori_inds, y_intercepts,\
+                                                                 reject_inds, 2, debug=debug) 
+    
+    #Select representative vertical lines
+    vert_inds, vert_lines, vert_vanish_pt, vert_vanish_pts, vert_vanish_xs, vert_vanish_ys, vert_vanish_inds, reject_inds = \
+    vanishingPointLineFilter(lines, vert_inds, reject_inds, hough_theta, debug=debug)
+    
+    #Compile reject lines
+    reject_lines = []
+    for ind in reject_inds:
+        reject_lines.append(lines[ind]['points'])    
     
     #Define additional outputs
     outputs = {'vert_angles_mean': vert_angles_mean, 'vert_angles_std': vert_angles_std, 'hori_angles_mean': hori_angles_mean, \
-               'hori_angles_std': hori_angles_std, 'redundant_outputs': redundant_outputs}
-    
+               'hori_angles_std': hori_angles_std, 'vert_vanish_pt': vert_vanish_pt, 'vert_vanish_pts':vert_vanish_pts, \
+               'vert_vanish_xs':vert_vanish_xs, 'vert_vanish_ys':vert_vanish_ys, 'vert_vanish_inds':vert_vanish_inds, \
+               'redundant_outputs': redundant_outputs}    
     
     #Define outputs
     return vert_inds, vert_lines, vert_angles, hori_inds, hori_lines, hori_angles, reject_inds, reject_lines, outputs 
- 
- 
-    
+   
     
     
         
-def calculateProjectiveTransform(lines, vert_inds, hori_inds, gray_smooth, resize_rows, image_scalar, hough_theta, sample_ct=2, debug = True):
+def projectiveTransform(image, lines, vert_inds, hori_inds, gray_smooth, resize_rows, image_scalar, hough_theta, sample_ct=2, debug = True):
     
-    #Randomly sample from the lists
-    vert_lines = [lines[ind] for ind in sample(vert_inds,sample_ct)]
-    hori_lines = [lines[ind] for ind in sample(hori_inds, sample_ct)]
-
+    #Check that there are sufficient lines
+    #if (len(vert_inds) < 2) or (len(hori_inds) < 2):
+        
     
-    #Define variables
-    proj_transforms = []
         
-    #Iterate through all pairs
-    it = 0
-    for a in range(0, len(vert_lines)):
-        vl1 = vert_lines[a]
-        for b in [x for x in range(0, len(vert_lines)) if x != a]:
-            vl2 = vert_lines[b]
-            for c in range(0, len(hori_lines)):
-                hl1 = hori_lines[c]
-                for d in [x for x in range(0, len(hori_lines)) if x != c]:
+    #Encapsulate in try except statement to handle errors
+    try:
+        #Randomly sample from the lists
+        vert_lines = [lines[ind] for ind in vert_inds]
+        hori_lines = [lines[ind] for ind in hori_inds]
+
+        #Redefine lines
+        vl1 = vert_lines[0]
+        vl2 = vert_lines[1]
+        hl1 = hori_lines[0]
+        hl2 = hori_lines[1]
+
+        #Pull the edge intercept points (where lines span full lenth of image)
+        l1 = vl1['points_edge']
+        l2 = vl2['points_edge']
+        l3 = hl1['points_edge']
+        l4 = hl2['points_edge']
+
+        #Pull line parameters
+        l1_m = vl1['slope']
+        l1_b = vl1['y_intercept']
+        l2_m = vl2['slope']
+        l2_b = vl2['y_intercept']
+        l3_m = hl1['slope']
+        l3_b = hl1['y_intercept']
+        l4_m = hl2['slope']
+        l4_b = hl2['y_intercept']
+
+        #Plot sampled perspective lines
+        if debug:
+            gray_sample_lines = cv.cvtColor(gray_smooth, cv.COLOR_GRAY2BGR)
+            gray_sample_lines = cv.line(gray_sample_lines, (l1[0], l1[1]), (l1[2], l1[3]), (0,255,128), 3, cv.LINE_8)
+            gray_sample_lines = cv.line(gray_sample_lines, (l2[0], l2[1]), (l2[2], l2[3]), (0,255,128), 3, cv.LINE_8)
+            gray_sample_lines = cv.line(gray_sample_lines, (l3[0], l3[1]), (l3[2], l3[3]), (0,255,128), 3, cv.LINE_8)
+            gray_sample_lines = cv.line(gray_sample_lines, (l4[0], l4[1]), (l4[2], l4[3]), (0,255,128), 3, cv.LINE_8)
+
+        #Sample line geometric relationship calculations
+        l1_ang = np.arctan(l1_m) * 180/np.pi
+        l2_ang = np.arctan(l2_m) * 180/np.pi
+        l3_ang = np.arctan(l3_m) * 180/np.pi
+        l4_ang = np.arctan(l4_m) * 180/np.pi
+        l1l3_x, l1l3_y = calculateLineIntercept(vl1, hl1, hough_theta, debug)
+        l1l4_x, l1l4_y = calculateLineIntercept(vl1, hl2, hough_theta, debug)
+        l2l3_x, l2l3_y = calculateLineIntercept(vl2, hl1, hough_theta, debug)
+        l2l4_x, l2l4_y = calculateLineIntercept(vl2, hl2, hough_theta, debug)
+        l1l3_pt = [l1l3_x, l1l3_y]
+        l1l4_pt = [l1l4_x, l1l4_y]
+        l2l3_pt = [l2l3_x, l2l3_y]
+        l2l4_pt = [l2l4_x, l2l4_y]
+        #l1_len = np.sqrt((l1l3_pt[1] - l1l4_pt[1])**2 + (l1l3_pt[0] - l1l4_pt[0])**2)
+        #l2_len = np.sqrt((l2l3_pt[1] - l2l4_pt[1])**2 + (l2l3_pt[0] - l2l4_pt[0])**2)
+        #l3_len = np.sqrt((l1l3_pt[1] - l2l3_pt[1])**2 + (l1l3_pt[0] - l2l3_pt[0])**2)
+        #l4_len = np.sqrt((l1l4_pt[1] - l2l4_pt[1])**2 + (l1l4_pt[0] - l2l4_pt[0])**2)
+        #l1l3_ang = np.arctan((l1l3_pt[1] - l1l4_pt[1])/(l1l3_pt[0] - l1l4_pt[0])) * 180/np.pi
+        #l1l4_ang = np.arctan((l2l3_pt[1] - l2l4_pt[1])/(l2l3_pt[0] - l2l4_pt[0])) * 180/np.pi
+        #l2l3_ang = np.arctan((l1l3_pt[1] - l2l3_pt[1])/(l1l3_pt[0] - l2l3_pt[0])) * 180/np.pi
+        #l2l4_ang = np.arctan((l1l4_pt[1] - l2l4_pt[1])/(l1l4_pt[0] - l2l4_pt[0])) * 180/np.pi
+
+        if debug:
+            gray_sample_lines = cv.circle(gray_sample_lines, (int(l1l3_x), int(l1l3_y)), 10, (255,255,255), thickness=-1)
+            gray_sample_lines = cv.circle(gray_sample_lines, (int(l1l4_x), int(l1l4_y)), 10, (0,128,255), thickness=-1)
+            gray_sample_lines = cv.circle(gray_sample_lines, (int(l2l3_x), int(l2l3_y)), 10, (0,128,255), thickness=-1)
+            gray_sample_lines = cv.circle(gray_sample_lines, (int(l2l4_x), int(l2l4_y)), 10, (0,128,255), thickness=-1)
+
+        #Redefine lines in terms of just the box that is being reshapen
+        l1_box = l1l3_pt + l1l4_pt
+        l2_box = l2l3_pt + l2l4_pt
+        l3_box = l1l3_pt + l2l3_pt
+        l4_box = l1l4_pt + l2l4_pt
+        if debug:
+            gray_sample_box = cv.cvtColor(gray_smooth, cv.COLOR_GRAY2BGR)
+            gray_sample_box = cv.line(gray_sample_box, (int(l1_box[0]), int(l1_box[1])), (int(l1_box[2]), int(l1_box[3])),\
+                                      (0,255,128), 3, cv.LINE_4)
+            gray_sample_box = cv.line(gray_sample_box, (int(l2_box[0]), int(l2_box[1])), (int(l2_box[2]), int(l2_box[3])),\
+                                      (0,255,128), 3, cv.LINE_4)
+            gray_sample_box = cv.line(gray_sample_box, (int(l3_box[0]), int(l3_box[1])), (int(l3_box[2]), int(l3_box[3])),\
+                                      (0,255,128), 3, cv.LINE_4)
+            gray_sample_box = cv.line(gray_sample_box, (int(l4_box[0]), int(l4_box[1])), (int(l4_box[2]), int(l4_box[3])),\
+                                      (0,255,128), 3, cv.LINE_4)
+
+        #Define the moving (reference) points    
+        moving_pts = np.float32([[l1l3_pt], [l1l4_pt], [l2l3_pt], [l2l4_pt]])
+
+        #Make second vertical line parallel to first
+        l2_new_m = l1_m
+        if np.isinf(l2_new_m):
+            l2l4_new_x = l2l3_x
+            l2l4_new_y = l4_m * l2l4_new_x + l4_b
+            l2l4_new_pt = [l2l4_new_x, l2l4_new_y]
+        else:
+            l2_new_b = l2l3_y - l2_new_m * l2l3_x
+            l2l4_new_x = (l2_new_b - l4_b)/(l4_m - l2_new_m)
+            l2l4_new_y = l2_new_m * l2l4_new_x + l2_new_b
+            l2l4_new_pt = [l2l4_new_x, l2l4_new_y]
+
+        l2_new_box = l2l3_pt + l2l4_new_pt
+        if debug:
+
+            gray_sample_box = cv.line(gray_sample_box, (int(l2_new_box[0]), int(l2_new_box[1])), (int(l2_new_box[2]), int(l2_new_box[3])),\
+                                      (0,128,256), 3, cv.LINE_4)
+            gray_sample_box = cv.line(gray_sample_box, (int(l2l4_x), int(l2l4_y)), (int(l2_new_box[2]), int(l2_new_box[3])),\
+                                      (0,128,256), 3, cv.LINE_4)
+
+        #Make second horizontal line parallel to first
+        l4_new_m = l3_m
+        l4_new_b = l1l4_y - l4_new_m * l1l4_x
+        if np.isinf(l2_new_m):
+            l2l4_new_x = l2l4_x
+            l2l4_new_y = l4_new_m * l2l4_new_x + l4_new_b
+        else:
+            l2l4_new_x = (l2_new_b - l4_new_b)/(l4_new_m - l2_new_m)
+            l2l4_new_y = l2_new_m * l2l4_new_x + l2_new_b
+
+        l2l4_new_pt = [l2l4_new_x, l2l4_new_y]
+        l4_new_box = l1l4_pt + l2l4_new_pt
+        l2_new_box = l2l3_pt + l2l4_new_pt
+        if debug:
+            gray_sample_box = cv.line(gray_sample_box, (int(l2_new_box[0]), int(l2_new_box[1])), (int(l2_new_box[2]), int(l2_new_box[3])),\
+                                      (256,128,0), 3, cv.LINE_4)
+            gray_sample_box = cv.line(gray_sample_box, (int(l4_new_box[0]), int(l4_new_box[1])), (int(l4_new_box[2]), int(l4_new_box[3])),\
+                                      (256,128,0), 3, cv.LINE_4)
+
+        #Make all angles right - convert rhombus to rectangle
+        if (l3_m == 0):   #Case where no rotation will be necessary at the end
+            l2l4_new_x = l2l3_x
+            l2l4_new_pt = [l2l4_new_x, l2l4_new_y]
+            l1l4_new_x = l1l3_x
+            l1l4_new_pt = [l1l4_new_x, l2l4_new_y]       
+        else:
+            l1_new_m = np.tan((l3_ang - 90) * (np.pi/180))
+            l1_new_b = l1l3_y - l1_new_m * l1l3_x
+            l1l4_new_x = (l1_new_b - l4_new_b)/(l4_new_m - l1_new_m)
+            l1l4_new_y = l1_new_m * l1l4_new_x + l1_new_b
+            l1l4_new_pt = [l1l4_new_x, l1l4_new_y]
+            l2_new_m = l1_new_m
+            l2_new_b = l2l3_y - l2_new_m * l2l3_x
+            l2l4_new_x = (l2_new_b - l4_new_b)/(l4_new_m - l2_new_m)
+            l2l4_new_y = l2_new_m * l2l4_new_x + l2_new_b
+            l2l4_new_pt = [l2l4_new_x, l2l4_new_y]
+            #l1l4_new_pt
+            #l2l4_new_pt
+        l1_new_box = l1l3_pt + l1l4_new_pt
+        l2_new_box = l2l3_pt + l2l4_new_pt
+        l3_new_box = l3_box #NO CHANGE
+        l4_new_box = l1l4_new_pt + l2l4_new_pt
+
+
+        if debug:
+            gray_sample_box = cv.line(gray_sample_box, (int(l1_new_box[0]), int(l1_new_box[1])), (int(l1_new_box[2]), int(l1_new_box[3])),\
+                                      (128,0,256), 3, cv.LINE_4)
+            gray_sample_box = cv.line(gray_sample_box, (int(l2_new_box[0]), int(l2_new_box[1])), (int(l2_new_box[2]), int(l2_new_box[3])),\
+                                      (128,0,256), 3, cv.LINE_4)
+            gray_sample_box = cv.line(gray_sample_box, (int(l4_new_box[0]), int(l4_new_box[1])), (int(l4_new_box[2]), int(l4_new_box[3])),\
+                                      (128,0,256), 3, cv.LINE_4)  
+
+        #Projective Transformation
+        moving_pts = (1/image_scalar) * moving_pts
+        fixed_pts = (1/image_scalar) * np.float32([[l1l3_pt], [l1l4_new_pt], [l2l3_pt], [l2l4_new_pt]]) 
+        proj_trans = cv.getPerspectiveTransform(moving_pts, fixed_pts)
+        proj_trans = np.asarray(proj_trans)
+
+
+        #Store Transform
+        #proj_transforms.append(proj_trans)
+
+
+
+        #Select representative Projective Transform
+        #proj_transform_means = np.zeros((3,3))
+        #proj_transform_stds = np.zeros((3,3))
+        #for r in range(0, 3):
+        #    for c in range(0, 3):
+        #        values = []
+        #        for i in range(0, it):
+        #            values.append(proj_transforms[i][r][c])
+        #            
+        #        #Calculate statistics for the list of projective transforms
+        #        proj_transform_means[r][c] = np.mean(values) 
+        #        proj_transform_stds[r][c] = np.std(values)
+
+        #print(proj_transform_means), print(proj_transform_stds)
+        #proj_transform = proj_transform_means
+
+        #Perform Projective Transform
+        proj_transform = proj_trans
+        image_rows, image_cols, channels = image.shape
+        transed = cv.warpPerspective(image, proj_trans, (image_cols, image_rows))
+
+        #Rotate image
+        rot_ang = l3_ang    
+        rotate_trans = cv.getRotationMatrix2D(tuple(np.array([image_rows, image_cols])/2), rot_ang, 1.0)
+        transed = cv.warpAffine(transed, rotate_trans, (image_cols, image_rows))
         
-                    #Pull second horizontal line
-                    hl2 = hori_lines[d]
-                    
-                    #Pull the edge intercept points (where lines span full lenth of image)
-                    l1 = vl1['points_edge']
-                    l2 = vl2['points_edge']
-                    l3 = hl1['points_edge']
-                    l4 = hl2['points_edge']
-                    
-                    #Pull line parameters
-                    l1_m = vl1['slope']
-                    l1_b = vl1['y_intercept']
-                    l2_m = vl2['slope']
-                    l2_b = vl2['y_intercept']
-                    l3_m = hl1['slope']
-                    l3_b = hl1['y_intercept']
-                    l4_m = hl2['slope']
-                    l4_b = hl2['y_intercept']
-                    
-                    
-                    #Redefine them to span entire image
-                #    if (l1[2] == l1[0]):
-                #        l1_m = float('inf')
-                #        l1_b = None
-                #        l1_func = lambda y: l1[0]
-                #        l1 = [l1[0], resize_rows, l1[2], 0]
-                #        print(f'      Line 1 - Coords = {l1}')
-                #    else:
-                #        l1_m = (l1[3] - l1[1])/(l1[2] - l1[0])
-                #        l1_b = l1[1] - (l1_m * l1[0])
-                #        l1_func = lambda y: (y - l1_b)/l1_m
-                #        l1 = [int(l1_func(resize_rows)), resize_rows, int(l1_func(0)),0]
-                #        print(f'      Line 1 - Coords = {l1}')
-                #        #l2 = vert_lines_samples[1][0]
-                #    if (l2[2] == l2[0]):
-                ##        l2_m = float('inf')
-                #        l2_b = None
-                #        l2_func = lambda y: l1[0]
-                #        l2 = [l2[0], resize_rows, l2[2], 0]
-                #    else:
-                #        l2_m = (l2[3] - l2[1])/(l2[2] - l2[0])
-                #        l2_b = l2[1] - (l2_m * l2[0])
-                #        l2_func = lambda y: (y - l2_b)/l2_m
-                #        l2 = [int(l2_func(resize_rows)), resize_rows, int(l2_func(0)),0]
-
-                    
-                    #l3_m = (l3[3] - l3[1])/(l3[2] - l3[0])
-                    #l3_b = l3[1] - (l3_m * l3[0])
-                    #l3_func = lambda y: (y - l3_b)/l3_m
-                    #l3 = [int(l3_func(resize_rows)), resize_rows, int(l3_func(0)),0]
-
-                        #l4 = hori_lines_samples[1][0]
-                    #l4_m = (l4[3] - l4[1])/(l4[2] - l4[0])
-                    #l4_b = l4[1] - (l4_m * l1[0])
-                    #l4_func = lambda y: (y - l4_b)/l4_m
-                    #l4 = [int(l4_func(resize_rows)), resize_rows, int(l4_func(0)),0]
-
-                    #Plot sampled perspective lines
-                    if debug:
-                        gray_sample_lines = cv.cvtColor(gray_smooth, cv.COLOR_GRAY2BGR)
-                        gray_sample_lines = cv.line(gray_sample_lines, (l1[0], l1[1]), (l1[2], l1[3]), (0,255,128), 3, cv.LINE_8)
-                        gray_sample_lines = cv.line(gray_sample_lines, (l2[0], l2[1]), (l2[2], l2[3]), (0,255,128), 3, cv.LINE_8)
-                        gray_sample_lines = cv.line(gray_sample_lines, (l3[0], l3[1]), (l3[2], l3[3]), (0,255,128), 3, cv.LINE_8)
-                        gray_sample_lines = cv.line(gray_sample_lines, (l4[0], l4[1]), (l4[2], l4[3]), (0,255,128), 3, cv.LINE_8)
-
-                    #Sample line geometric relationship calculations
-                    l1_ang = np.arctan(l1_m) * 180/np.pi
-                    l2_ang = np.arctan(l2_m) * 180/np.pi
-                    l3_ang = np.arctan(l3_m) * 180/np.pi
-                    l4_ang = np.arctan(l4_m) * 180/np.pi
-                    l1l3_x, l1l3_y = calculateLineIntercept(vl1, hl1, hough_theta, debug)
-                    l1l4_x, l1l4_y = calculateLineIntercept(vl1, hl2, hough_theta, debug)
-                    l2l3_x, l2l3_y = calculateLineIntercept(vl2, hl1, hough_theta, debug)
-                    l2l4_x, l2l4_y = calculateLineIntercept(vl2, hl2, hough_theta, debug)
-                    
-                    
-                    
-                  #  if l1[2] == l1[0]:
-                  #      l1l3_x = l1[0]
-                  #      l1l4_x = l1[0]
-                  #      l2l3_x = (l3_b - l2_b)/(l2_m - l3_m)
-                  #      l2l4_x = (l4_b - l2_b)/(l2_m - l4_m)
-                  #  if l2[2] == l2[0]:
-                  #      l2l3_x = l2[0]
-                   #     l2l4_x = l2[0]   
-                  #      l2l3_x = (l3_b - l2_b)/(l2_m - l3_m)
-                  #      l2l4_x = (l4_b - l2_b)/(l2_m - l4_m)
-                  #  else:
-                  #      l1l3_x = (l3_b - l1_b)/(l1_m - l3_m)
-                  #      l1l4_x = (l4_b - l1_b)/(l1_m - l4_m)
-                  #      l2l3_x = (l3_b - l2_b)/(l2_m - l3_m)
-                  #      l2l4_x = (l4_b - l2_b)/(l2_m - l4_m)
-                  #  l1l3_y = l1_m * l1l3_x + l1_b
-                  #  l1l4_y = l1_m * l1l4_x + l1_b
-                  #  l2l3_y = l2_m * l2l3_x + l2_b
-                  #  l2l4_y = l2_m * l2l4_x + l2_b
-                
-                
-                
-                    l1l3_pt = [l1l3_x, l1l3_y]
-                    l1l4_pt = [l1l4_x, l1l4_y]
-                    l2l3_pt = [l2l3_x, l2l3_y]
-                    l2l4_pt = [l2l4_x, l2l4_y]
-                    #l1_len = np.sqrt((l1l3_pt[1] - l1l4_pt[1])**2 + (l1l3_pt[0] - l1l4_pt[0])**2)
-                    #l2_len = np.sqrt((l2l3_pt[1] - l2l4_pt[1])**2 + (l2l3_pt[0] - l2l4_pt[0])**2)
-                    #l3_len = np.sqrt((l1l3_pt[1] - l2l3_pt[1])**2 + (l1l3_pt[0] - l2l3_pt[0])**2)
-                    #l4_len = np.sqrt((l1l4_pt[1] - l2l4_pt[1])**2 + (l1l4_pt[0] - l2l4_pt[0])**2)
-                    #l1l3_ang = np.arctan((l1l3_pt[1] - l1l4_pt[1])/(l1l3_pt[0] - l1l4_pt[0])) * 180/np.pi
-                    #l1l4_ang = np.arctan((l2l3_pt[1] - l2l4_pt[1])/(l2l3_pt[0] - l2l4_pt[0])) * 180/np.pi
-                    #l2l3_ang = np.arctan((l1l3_pt[1] - l2l3_pt[1])/(l1l3_pt[0] - l2l3_pt[0])) * 180/np.pi
-                    #l2l4_ang = np.arctan((l1l4_pt[1] - l2l4_pt[1])/(l1l4_pt[0] - l2l4_pt[0])) * 180/np.pi
-
-                    if debug:
-                        gray_sample_lines = cv.circle(gray_sample_lines, (int(l1l3_x), int(l1l3_y)), 10, (255,255,255), thickness=-1)
-                        gray_sample_lines = cv.circle(gray_sample_lines, (int(l1l4_x), int(l1l4_y)), 10, (0,128,255), thickness=-1)
-                        gray_sample_lines = cv.circle(gray_sample_lines, (int(l2l3_x), int(l2l3_y)), 10, (0,128,255), thickness=-1)
-                        gray_sample_lines = cv.circle(gray_sample_lines, (int(l2l4_x), int(l2l4_y)), 10, (0,128,255), thickness=-1)
-
-                    #Redefine lines in terms of just the box that is being reshapen
-                    l1_box = l1l3_pt + l1l4_pt
-                    l2_box = l2l3_pt + l2l4_pt
-                    l3_box = l1l3_pt + l2l3_pt
-                    l4_box = l1l4_pt + l2l4_pt
-                    if debug:
-                        gray_sample_box = cv.cvtColor(gray_smooth, cv.COLOR_GRAY2BGR)
-                        gray_sample_box = cv.line(gray_sample_box, (int(l1_box[0]), int(l1_box[1])), (int(l1_box[2]), int(l1_box[3])), (0,255,128), 3, cv.LINE_4)
-                        gray_sample_box = cv.line(gray_sample_box, (int(l2_box[0]), int(l2_box[1])), (int(l2_box[2]), int(l2_box[3])), (0,255,128), 3, cv.LINE_4)
-                        gray_sample_box = cv.line(gray_sample_box, (int(l3_box[0]), int(l3_box[1])), (int(l3_box[2]), int(l3_box[3])), (0,255,128), 3, cv.LINE_4)
-                        gray_sample_box = cv.line(gray_sample_box, (int(l4_box[0]), int(l4_box[1])), (int(l4_box[2]), int(l4_box[3])), (0,255,128), 3, cv.LINE_4)
-
-
-                    #Define the moving (reference) points    
-                    moving_pts = np.float32([[l1l3_pt], [l1l4_pt], [l2l3_pt], [l2l4_pt]])
-
-                    #Make second vertical line parallel to first
-                    l2_new_m = l1_m
-                    l2_new_b = l2l3_y - l2_new_m * l2l3_x
-                    l2l4_new_x = (l2_new_b - l4_b)/(l4_m - l2_new_m)
-                    l2l4_new_y = l2_new_m * l2l4_new_x + l2_new_b
-                    l2l4_new_pt = [l2l4_new_x, l2l4_new_y]
-                    l2_new_box = l2l3_pt + l2l4_new_pt
-                    if debug:
-                        #print(l1_box), print(l2_box),print(l3_box),print(l4_box), print(l2_new_box)
-                        gray_sample_box = cv.line(gray_sample_box, (int(l2_new_box[0]), int(l2_new_box[1])), (int(l2_new_box[2]), int(l2_new_box[3])), (0,128,256), 3, cv.LINE_4)
-                        gray_sample_box = cv.line(gray_sample_box, (int(l2l4_x), int(l2l4_y)), (int(l2_new_box[2]), int(l2_new_box[3])), (0,128,256), 3, cv.LINE_4)
-
-                    #Make second horizontal line parallel to first
-                    l4_new_m = l3_m
-                    l4_new_b = l1l4_y - l4_new_m * l1l4_x
-                    l2l4_new_x = (l2_new_b - l4_new_b)/(l4_new_m - l2_new_m)
-                    l2l4_new_y = l2_new_m * l2l4_new_x + l2_new_b
-                    l2l4_new_pt = [l2l4_new_x, l2l4_new_y]
-                    l4_new_box = l1l4_pt + l2l4_new_pt
-                    l2_new_box = l2l3_pt + l2l4_new_pt
-                    if debug:
-                        gray_sample_box = cv.line(gray_sample_box, (int(l2_new_box[0]), int(l2_new_box[1])), (int(l2_new_box[2]), int(l2_new_box[3])), (256,128,0), 3, cv.LINE_4)
-                        gray_sample_box = cv.line(gray_sample_box, (int(l4_new_box[0]), int(l4_new_box[1])), (int(l4_new_box[2]), int(l4_new_box[3])), (256,128,0), 3, cv.LINE_4)
-
-                    #Make all angles right - convert rhombus to rectangle
-                    if (l3_m == 0):   #Case where no rotation will be necessary at the end
-                        l2l4_new_x = l2l3_x
-                        l2l4_new_pt = [l2l4_new_x, l2l4_new_y]
-                        l1l4_new_x = l1l3_x
-                        l1l4_new_pt = [l1l4_new_x, l2l4_new_y]       
-                    else:
-                        l1_new_m = np.tan((l3_ang - 90) * (np.pi/180))
-                        l1_new_b = l1l3_y - l1_new_m * l1l3_x
-                        l1l4_new_x = (l1_new_b - l4_new_b)/(l4_new_m - l1_new_m)
-                        l1l4_new_y = l1_new_m * l1l4_new_x + l1_new_b
-                        l1l4_new_pt = [l1l4_new_x, l1l4_new_y]
-                        l2_new_m = l1_new_m
-                        l2_new_b = l2l3_y - l2_new_m * l2l3_x
-                        l2l4_new_x = (l2_new_b - l4_new_b)/(l4_new_m - l2_new_m)
-                        l2l4_new_y = l2_new_m * l2l4_new_x + l2_new_b
-                        l2l4_new_pt = [l2l4_new_x, l2l4_new_y]
-                        #l1l4_new_pt
-                        #l2l4_new_pt
-                    l1_new_box = l1l3_pt + l1l4_new_pt
-                    l2_new_box = l2l3_pt + l2l4_new_pt
-                    l3_new_box = l3_box #NO CHANGE
-                    l4_new_box = l1l4_new_pt + l2l4_new_pt
-    
-    
-                    if debug:
-                        gray_sample_box = cv.line(gray_sample_box, (int(l1_new_box[0]), int(l1_new_box[1])), (int(l1_new_box[2]), int(l1_new_box[3])), (128,0,256), 3, cv.LINE_4)
-                        gray_sample_box = cv.line(gray_sample_box, (int(l2_new_box[0]), int(l2_new_box[1])), (int(l2_new_box[2]), int(l2_new_box[3])), (128,0,256), 3, cv.LINE_4)
-                        gray_sample_box = cv.line(gray_sample_box, (int(l4_new_box[0]), int(l4_new_box[1])), (int(l4_new_box[2]), int(l4_new_box[3])), (128,0,256), 3, cv.LINE_4)  
+        #Create empty images if not created earlier
+        if not debug: 
+            gray_sample_lines = []
+            gray_sample_box = []
         
-                    #Projective Transformation
-                    moving_pts = (1/image_scalar) * moving_pts
-                    fixed_pts = (1/image_scalar) * np.float32([[l1l3_pt], [l1l4_new_pt], [l2l3_pt], [l2l4_new_pt]]) 
-                    proj_trans = cv.getPerspectiveTransform(moving_pts, fixed_pts)
-                    proj_trans = np.asarray(proj_trans)
-                    
-                    
-                    #Store Transform
-                    if it == 0:
-                        proj_transforms.append(proj_trans)
-                    else:
-                        
-                        proj_transforms.append(proj_trans)
-                    
-                    
-                    #proj_transforms.append(proj_trans)
+        #Print update
+        print('      Perspective correction successful!')
         
+    except Exception:
         
-        
-                    #Iteration counter
-                    it += 1
-        
-    #Select representative Projective Transform
-    proj_transform_means = np.zeros((3,3))
-    proj_transform_stds = np.zeros((3,3))
-    for r in range(0, 3):
-        for c in range(0, 3):
-            values = []
-            for i in range(0, it):
-                values.append(proj_transforms[i][r][c])
-                
-            #Calculate statistics for the list of projective transforms
-            proj_transform_means[r][c] = np.mean(values) 
-            proj_transform_stds[r][c] = np.std(values)
-            
-    #print(proj_transform_means), print(proj_transform_stds)
-    proj_transform = proj_transform_means
-
-    
-    if not debug: 
+        transed = image
+        proj_transform = []
+        rot_ang = 0
         gray_sample_lines = []
-        gray_sample_box = []
+        gray_sample_box = []       
+        
+        #Print update
+        print(f'      Perspective correction failed with {Exception}')
     
-    #Define outputs
-    proj_transforms = proj_trans
-    rot_ang = l3_ang
-    return proj_transform, rot_ang, gray_sample_lines, gray_sample_box    
+     
+    #Return outputs
+    return transed, proj_transform, rot_ang, gray_sample_lines, gray_sample_box    
         
 #def correctPerspective():
     
