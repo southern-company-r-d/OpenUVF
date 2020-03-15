@@ -89,9 +89,28 @@ def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, debug=True):
     if debug:
         print('   Edge Detection:')
         
+    #Calculate image histogram and cumulative distribution function
+    gray_hist = cv.calcHist([gray], [0], None, [256], [0, 256])
+    gray_hist_cumsum = np.cumsum(gray_hist)/np.sum(gray_hist)
+    #print(gray_hist), print(gray_hist_cumsum)
+    plt.figure(figsize=[18, 9.5])
+    plt.plot(range(0,256), gray_hist)   
+    plt.figure(figsize=[18, 9.5])
+    plt.plot(range(0,256), gray_hist_cumsum) 
+    
+    #Calculate edge detection threshhold 
+    image_mean = np.mean(gray.ravel())
+    peak_val = np.argmax(gray_hist)
+    peak_left = gray_hist_cumsum[peak_val]
+    peak_right = 1 - peak_left
+    #canny_thresh1 = np.min(np.where(gray_hist_cumsum > 0.50))
+    #canny_thresh2 = 200   #np.max(np.where(gray_hist_cumsum <= 0.99)) + 1
+    #print(canny_thresh1), print(canny_thresh2), print(image_mean), print(peak_val), print(peak_left), print(peak_right)
+    
+    
     #Initial edge detection parameters
-    gauss_size = (5,5)
-    gauss_std = 2;
+    gauss_size = (7,7)
+    gauss_std = 3;
     canny_thresh1 = 100
     canny_thresh2 = 200
     edge_it = 0
@@ -511,7 +530,7 @@ def histogramLineFilter(lines, line_points, line_angles, line_inds, ax_intercept
         bin_angles_diff.append([np.abs(bin_mean_angles[i] - angle) for angle in bin_angles[i]])
 
         #Calculate order of lines for each parameter
-        bin_lengths_order.append(np.argsort(-1 * np.asarray(bin_lengths[i])))   #NEED TO UPDATE
+        bin_lengths_order.append(np.argsort(np.asarray(bin_lengths[i])))   #NEED TO UPDATE
         bin_intercepts_order.append(np.argsort(bin_intercepts_diff[i]))
         bin_angles_order.append(np.argsort(bin_angles_diff[i]))
 
@@ -519,6 +538,9 @@ def histogramLineFilter(lines, line_points, line_angles, line_inds, ax_intercept
 
     #print(-1 * np.asarray(bin_lengths[i])), print(bin_lengths_order), print(bin_angles_order), print(bin_intercepts_order)
 
+
+    
+    
     #Calculate rating of each line to selet the representative line
     bin_line_rankings = []
     output_points = []
@@ -528,11 +550,16 @@ def histogramLineFilter(lines, line_points, line_angles, line_inds, ax_intercept
 
         if len(bin_angles_order[i] > 0):
 
+            #Pull orders and values and convert to float
+            angles_order = np.asarray(bin_angles_order[i]) + 1
+            intercepts_order = np.asarray(bin_intercepts_order[i]) + 1
+            lengths = np.asarray(bin_lengths[i])
+            
             #Calculate line rankings
-            bin_line_ranking = 0.45 * bin_angles_order[i] + 0.35 * bin_intercepts_order[i]
-                               #+ 0.0 * bin_lengths_order[i]
+            bin_line_ranking = 0.3 * angles_order + 0.35 * intercepts_order + 0.35 * (1 - lengths/np.max(lengths))
             bin_line_rankings.append(list(bin_line_ranking))
 
+            
             #Define the horizontal output lines to be the line with the lowest ranking 
             best_line_ind = np.argmin(bin_line_ranking)
             output_inds.append(bin_inds[i][best_line_ind])
@@ -674,11 +701,7 @@ def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, 
         
         #Filter vertical lines - First round histogram based
         vert_lines, vert_inds, x_intercepts, reject_inds = histogramLineFilter(lines, vert_lines, vert_angles, vert_inds, x_intercepts,\
-                                                                 reject_inds, hist_bin_ct, debug=debug)
-        
-     
-    
-    
+                                                                 reject_inds, hist_bin_ct, debug=debug)  
     
     #Define outputs
     outputs = {'x_intercepts': x_intercepts, 'vert_angles': vert_angles, 'y_intercepts': y_intercepts, 'hori_angles': hori_angles}
