@@ -83,20 +83,42 @@ def processImage(image, debug=True):
 #   2. outputs (dict): contains all other required and debug outputs
     
 
-def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, debug=True):
+def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, params=None, debug=True):
    
     #Print update
     if debug:
         print('   Edge Detection:')
-        
+    
+    #Pull or define parameters
+    if params is None:
+        gauss_size = (9,9)
+        gauss_std = 3;
+        canny_thresh_min = 100
+        canny_thresh_max = 200        
+        edge_ratio_goal = 0.005 # 0.5% of total image area
+        edge_ratio_range = (0.0025, 0.025)
+    else:
+        gauss_size = params['gauss_size']
+        gauss_std = params['gauss_std']
+        canny_thresh_min = params['canny_thresh_min']
+        canny_thresh_max = params['canny_thresh_max']
+        edge_ratio_goal = params['edge_ratio_goal']
+        edge_ratio_range = params['edge_ratio_range']
+       
     #Calculate image histogram and cumulative distribution function
     gray_hist = cv.calcHist([gray], [0], None, [256], [0, 256])
     gray_hist_cumsum = np.cumsum(gray_hist)/np.sum(gray_hist)
     #print(gray_hist), print(gray_hist_cumsum)
-    plt.figure(figsize=[18, 9.5])
-    plt.plot(range(0,256), gray_hist)   
-    plt.figure(figsize=[18, 9.5])
-    plt.plot(range(0,256), gray_hist_cumsum) 
+    #plt.figure(figsize=[18, 9.5])
+    #plt.plot(range(0,256), gray_hist)   
+    #plt.figure(figsize=[18, 9.5])
+    #plt.plot(range(0,256), gray_hist_cumsum) 
+    
+    #Calculate threshold
+    
+    
+    #Calculate laplacians
+    
     
     #Calculate edge detection threshhold 
     image_mean = np.mean(gray.ravel())
@@ -108,28 +130,20 @@ def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, debug=True):
     #print(canny_thresh1), print(canny_thresh2), print(image_mean), print(peak_val), print(peak_left), print(peak_right)
     
     
-    #Initial edge detection parameters
-    gauss_size = (7,7)
-    gauss_std = 3;
-    canny_thresh1 = 100
-    canny_thresh2 = 200
-    edge_it = 0
-    edge_ratio_goal = 0.005 # 0.5% of total image area
-    edge_ratio_range = (0.0025, 0.0075)
+    #Iteratively refine edge detection until the proportion of edges falls into a prespecified range
     edge_errors = []
     edge_repeat = True
-    
-    #Iteratively refine edge detection until the proportion of edges falls into a prespecified range
+    edge_it = 0    
     while edge_repeat & (edge_it < 10):
         
         #Apply Gaussian Blur
-        hue_smooth = cv.GaussianBlur(hue, gauss_size, gauss_std)
-        rgb_min_smooth = cv.GaussianBlur(rgb_min, gauss_size, gauss_std)
-        gray_smooth = cv.GaussianBlur(gray, gauss_size, gauss_std)
+        hue_smooth = cv.GaussianBlur(hue, gauss_size, sigmaX=gauss_std, sigmaY=gauss_std)
+        rgb_min_smooth = cv.GaussianBlur(rgb_min, gauss_size, sigmaX=gauss_std, sigmaY=gauss_std)
+        gray_smooth = cv.GaussianBlur(gray, gauss_size, sigmaX=gauss_std, sigmaY=gauss_std)
 
         #Canny edge detection
-        edges_rgb_min = cv.Canny(rgb_min_smooth, 0.5 * canny_thresh1, 0.5 * canny_thresh2)
-        edges_gray = cv.Canny(gray, canny_thresh1, canny_thresh2)
+        edges_rgb_min = cv.Canny(rgb_min_smooth, 0.5 * canny_thresh_min, 0.5 * canny_thresh_max)
+        edges_gray = cv.Canny(gray, canny_thresh_min, canny_thresh_max)
         edges_hue = cv.Canny(hue_smooth, 25, 50)
         
         #Determine best edge source
@@ -152,18 +166,21 @@ def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, debug=True):
             edge_error = edge_ratio - edge_ratio_goal
             edge_errors.append(edge_error)
             
+            #Handle case of no edges detected
+            
+            
             #Update Parameters
             edge_P = edge_ratio/edge_ratio_goal
             edge_I = 0            
             edge_D = 0
-            gauss_std = (edge_ratio/edge_ratio_goal) * gauss_std 
-            canny_thresh1 = (np.sqrt(edge_ratio/edge_ratio_goal) * canny_thresh1)
-            canny_thresh2 = (np.sqrt(edge_ratio/edge_ratio_goal) * canny_thresh2)
+            gauss_std = np.sqrt(edge_ratio/edge_ratio_goal) * gauss_std 
+            #canny_thresh_min = (np.sqrt(edge_ratio/edge_ratio_goal) * canny_thresh_min)
+            #canny_thresh_max = (np.sqrt(edge_ratio/edge_ratio_goal) * canny_thresh_max)
             
             #Print Update
             if debug:
                 print(f'      ({edge_it}): Ratio = {edge_percent:.2f}%   -   ',\
-                      f'Gauss STD = {gauss_std:.2f}; Canny Thresh = {canny_thresh1:.2f}')
+                      f'Gauss STD = {gauss_std:.2f}; Canny Thresh = {canny_thresh_min:.2f}')
                 
         else:
             
@@ -461,9 +478,13 @@ def vanishingPointLineFilter(lines, inds, reject_inds, hough_theta, pair_ct=1, d
         dist = np.sqrt((pt[0] - vanish_pt[0])**2 + (pt[1] - vanish_pt[1])**2)
         vanish_dists.append(dist)
     
-    #Select the line pair 
-    repr_inds = vanish_inds[np.argmin(vanish_dists)]
-    repr_lines = [lines[ind]['points'].tolist() for ind in repr_inds]
+    #Select the line pair
+    try:   #TEMPORARY
+        repr_inds = vanish_inds[np.argmin(vanish_dists)]
+        repr_lines = [lines[ind]['points'].tolist() for ind in repr_inds]
+    except Exception:
+        repr_inds = vanish_inds
+        repr_lines = [lines[ind]['points'].tolist() for ind in repr_inds]
     
     #Update reject_inds
     for ind in inds:

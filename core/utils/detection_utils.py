@@ -27,6 +27,7 @@ import array as arr
 import cv2 as cv
 from matplotlib import pyplot as plt
 from core.object_detection.utils import visualization_utils as vis_util
+from PIL import Image
 
 # image_pipeline
 #
@@ -448,4 +449,68 @@ def classify_cracks(np_image, crack_boxes):
     
 def get_image_size_from_pipeline(pipeline_config):
     x=y
+
+# load_image_into_numpy_array
+#
+# Converts image into a numpy array for later tensorflow functions. Code unmodified from the TensorFlow Authors
+#
     
+    
+def load_image_into_numpy_array(image):
+  (im_width, im_height) = image.size
+  return np.array(image.getdata()).reshape(
+      (im_height, im_width, 3)).astype(np.uint8)
+
+# run_inference
+#
+# Implements Tensorflow's object detection model
+
+
+
+def run_inference(sess, np_images, graph, tensor_dict, image_tensor):
+      
+    #Defining Storage Array
+    outputs = []
+
+    #Tracking image count
+    nim = 1
+
+    #Iterate through directory
+    #for image_name in os.listdir(images_path):
+    for image_np in np_images:
+
+        # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
+        image_np_expanded = np.expand_dims(image_np, axis=0)                         
+
+        # Run inference
+        output = sess.run(tensor_dict,
+                             feed_dict={image_tensor: np.expand_dims(image_np, 0)})
+
+        # all outputs are float32 numpy arrays, so convert types as appropriate
+        output['num_detections'] = int(output['num_detections'][0])
+        output['detection_classes'] = output[
+          'detection_classes'][0].astype(np.uint8)
+        output['detection_boxes'] = output['detection_boxes'][0]
+        output['detection_scores'] = output['detection_scores'][0]
+        if 'detection_masks' in output:
+            output['detection_masks'] = output['detection_masks'][0]
+
+        #Storing output
+        outputs.append(output)
+
+        #Updating image number
+        nim = nim + 1
+                
+    return outputs
+
+def output_images(np_images, image_list, output_dir):
+    
+    for i in range(len(np_images)):
+
+        #Pull image and name
+        image_np = np_images[i]        
+        image_name = image_list[i]
+        
+        #Save Image to output directory
+        image_out = Image.fromarray(image_np)
+        image_out.save(os.path.join(output_dir, image_name))
