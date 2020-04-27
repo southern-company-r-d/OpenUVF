@@ -83,7 +83,7 @@ def processImage(image, debug=True):
 #   2. outputs (dict): contains all other required and debug outputs
     
 
-def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, params=None, debug=True):
+def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, params=None, remove_total_black=False, auto_threshold=True, debug=True):
    
     #Print update
     if debug:
@@ -91,7 +91,7 @@ def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, params=None, debug=True
     
     #Pull or define parameters
     if params is None:
-        gauss_size = (9,9)
+        gauss_size = (49,49)
         gauss_std = 3;
         canny_thresh_min = 100
         canny_thresh_max = 200        
@@ -104,6 +104,8 @@ def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, params=None, debug=True
         canny_thresh_max = params['canny_thresh_max']
         edge_ratio_goal = params['edge_ratio_goal']
         edge_ratio_range = params['edge_ratio_range']
+        
+    
        
     #Calculate image histogram and cumulative distribution function
     gray_hist = cv.calcHist([gray], [0], None, [256], [0, 256])
@@ -114,17 +116,35 @@ def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, params=None, debug=True
     #plt.figure(figsize=[18, 9.5])
     #plt.plot(range(0,256), gray_hist_cumsum) 
     
-    #Calculate threshold
+    #Identify areas of the image that are true black
+    total_black = []
+    if remove_total_black:
+        total_black = gray == 0
+        total_black = total_black.astype('uint8')
+        total_black = cv.dilate(total_black, np.ones((7,7), np.uint8), iterations=1)
+        total_black = total_black.astype(bool)
+    
+    #Calculate laplacian
+    #laplace = cv.Laplacian(gray, cv.CV_16S, ksize=3)
+    #plt.figure(figsize=[18, 9.5])
+    #plt.imshow(laplace)   
+    #print(laplace), print(type(laplace))
+    #laplace_hist = cv.calcHist(laplace, [0], None, [256], [0, 256])
+    #laplace_hist_cumsum = np.cumsum(laplace_hist)/np.sum(laplace_hist)
+    #plt.figure(figsize=[18, 9.5])
+    #plt.plot(range(0,256), laplace_hist)   
+    #plt.figure(figsize=[18, 9.5])
+    #plt.plot(range(0,256), laplace_hist_cumsum) 
     
     
-    #Calculate laplacians
-    
-    
-    #Calculate edge detection threshhold 
-    image_mean = np.mean(gray.ravel())
-    peak_val = np.argmax(gray_hist)
-    peak_left = gray_hist_cumsum[peak_val]
-    peak_right = 1 - peak_left
+    #Calculate edge detection threshhold
+    if auto_threshold:
+        image_mean = np.mean(gray.ravel())
+        peak_val = np.argmax(gray_hist)
+        peak_left = gray_hist_cumsum[peak_val]
+        peak_right = 1 - peak_left
+        canny_thresh_max = np.max(np.where(gray_hist_cumsum <= 0.9))
+        canny_thresh_min = int(0.5 * canny_thresh_max)
     #canny_thresh1 = np.min(np.where(gray_hist_cumsum > 0.50))
     #canny_thresh2 = 200   #np.max(np.where(gray_hist_cumsum <= 0.99)) + 1
     #print(canny_thresh1), print(canny_thresh2), print(image_mean), print(peak_val), print(peak_left), print(peak_right)
@@ -139,12 +159,16 @@ def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, params=None, debug=True
         #Apply Gaussian Blur
         hue_smooth = cv.GaussianBlur(hue, gauss_size, sigmaX=gauss_std, sigmaY=gauss_std)
         rgb_min_smooth = cv.GaussianBlur(rgb_min, gauss_size, sigmaX=gauss_std, sigmaY=gauss_std)
-        gray_smooth = cv.GaussianBlur(gray, gauss_size, sigmaX=gauss_std, sigmaY=gauss_std)
+        gray_smooth = gray#cv.GaussianBlur(gray.copy(), gauss_size, sigmaX=gauss_std, sigmaY=gauss_std)
 
         #Canny edge detection
         edges_rgb_min = cv.Canny(rgb_min_smooth, 0.5 * canny_thresh_min, 0.5 * canny_thresh_max)
-        edges_gray = cv.Canny(gray, canny_thresh_min, canny_thresh_max)
+        edges_gray = cv.Canny(gray_smooth, canny_thresh_min, canny_thresh_max)
         edges_hue = cv.Canny(hue_smooth, 25, 50)
+        
+        #Remove edges at boundaries of total black regions
+        if remove_total_black:
+            edges_gray[total_black] = 0
         
         #Determine best edge source
         edge_ratio_rgb_min = np.sum(edges_rgb_min)/(255 * image_pixels)
@@ -158,6 +182,7 @@ def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, params=None, debug=True
         edge_percent = edge_ratio * 100
         
         
+        
         #Determine if the edge detection should be repeated and how the parameters should change
         if (edge_ratio > edge_ratio_range[1]) | (edge_ratio < edge_ratio_range[0]):
             
@@ -167,15 +192,22 @@ def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, params=None, debug=True
             edge_errors.append(edge_error)
             
             #Handle case of no edges detected
-            
+            #print(edge_ratio)
+            #print(edge_error)
             
             #Update Parameters
-            edge_P = edge_ratio/edge_ratio_goal
-            edge_I = 0            
-            edge_D = 0
+            gauss_adder = 2 * int((100 * edge_error)/2)
+            #print(gauss_adder)
+            gauss_size = (gauss_size[0] + gauss_adder, gauss_size[0] + gauss_adder)
+            #print(gauss_size)
             gauss_std = np.sqrt(edge_ratio/edge_ratio_goal) * gauss_std 
-            #canny_thresh_min = (np.sqrt(edge_ratio/edge_ratio_goal) * canny_thresh_min)
-            #canny_thresh_max = (np.sqrt(edge_ratio/edge_ratio_goal) * canny_thresh_max)
+            canny_thresh_max = int(100 * edge_error) + canny_thresh_max
+            canny_thresh_min = int(0.5 * canny_thresh_max)
+            #print(int(100 * edge_error)), print(canny_thresh_max), print(canny_thresh_min)
+            
+            
+            #Verify that parameters are valid
+            
             
             #Print Update
             if debug:
@@ -195,7 +227,9 @@ def edgeDetection(rgb, rgb_min, gray, hue, image_pixels, params=None, debug=True
         edge_it = edge_it + 1
     
     #Define debug outputs
-    outputs = {'rgb_min_smooth': rgb_min_smooth, 'gray_smooth': gray_smooth, 'hue_smooth': hue_smooth, 'edges_rgb_min': edges_rgb_min, 'edges_gray': edges_gray, 'edges_hue': edges_hue}
+    outputs = {'rgb_min_smooth': rgb_min_smooth, 'gray_smooth': gray_smooth, 'hue_smooth': hue_smooth, 'edges_rgb_min': edges_rgb_min, \
+               'edges_gray': edges_gray, 'edges_hue': edges_hue, 'iterations': edge_it, 'edge_percent':edge_percent, \
+               'thresh_low': canny_thresh_min,'thresh_high':canny_thresh_max, 'total_black':total_black}
     
     
     #Define outputs
@@ -728,11 +762,15 @@ def filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, 
     outputs = {'x_intercepts': x_intercepts, 'vert_angles': vert_angles, 'y_intercepts': y_intercepts, 'hori_angles': hori_angles}
     
     #Return statement
-    return vert_inds, vert_lines, vert_angles, hori_inds, hori_lines, hori_angles, reject_inds, y_intercepts, outputs
+    return vert_inds, vert_lines, vert_angles, hori_inds, hori_lines, hori_angles, reject_inds, y_intercepts, x_intercepts, outputs
 
 
 
-def filterLines(lines, line_points, line_angles, hough_theta, debug = True):
+def filterLines(lines, line_points, line_angles, hough_theta, hori_select_mode='histogram', vert_select_mode='vanish point', \
+                hori_select_ct=2, vert_select_ct=3, debug = True):
+    
+    #Allocate error list
+    error_msgs = []
     
     #Convert to nparray for boolean indexing
     line_angles = np.array(line_angles)
@@ -750,9 +788,9 @@ def filterLines(lines, line_points, line_angles, hough_theta, debug = True):
     vert_angles[vert_angles <=0] = vert_angles[vert_angles <=0] + 180  
     vert_lengths = [lines[ind]['length'] for ind in vert_inds[0]]
     
-    #Calculate statistics
+    #Calculate statistics  
     vert_angles_mean = np.mean(vert_angles)
-    vert_angles_std = np.std(vert_angles)
+    vert_angles_std = np.std(vert_angles) 
     hori_angles_mean = np.mean(hori_angles)
     hori_angles_std = np.std(hori_angles)
     vert_lengths_mean = np.mean(vert_lengths)
@@ -761,7 +799,7 @@ def filterLines(lines, line_points, line_angles, hough_theta, debug = True):
     hori_lengths_std = np.std(hori_lengths)
     
     #Remove extreme outliers (i.e. std > 2)
-    max_std = 2
+    max_std = 1
     vert_angles_valid = (vert_angles <= (vert_angles_mean + max_std*vert_angles_std)) * (vert_angles >= (vert_angles_mean - \
                                                                                                          max_std*vert_angles_std))
     vert_angles = vert_angles[vert_angles_valid]
@@ -774,29 +812,91 @@ def filterLines(lines, line_points, line_angles, hough_theta, debug = True):
     reject_lines = np.concatenate((reject_lines, hori_lines[~hori_angles_valid]), 0)
     reject_inds = np.concatenate((reject_inds, np.where(~hori_angles_valid)), 1)
     hori_lines = hori_lines[hori_angles_valid]
+    outlier_inds = reject_inds
 
     #Remove redundant lines
-    vert_inds, vert_lines, vert_angles, hori_inds, hori_lines, hori_angles, reject_inds, y_intercepts, redundant_outputs \
+    vert_inds, vert_lines, vert_angles, hori_inds, hori_lines, hori_angles, reject_inds, y_intercepts, x_intercepts, redundant_outputs \
         = filterRedundantLines(lines, vert_inds, hori_inds, reject_inds, hough_theta, debug = debug)
     
+    #Store unique and non-outlier lines before selection and calculate new statistics
+    vert_angles_all = vert_angles
+    hori_angles_all = hori_angles
+    vert_angles_mean = np.mean(vert_angles)
+    vert_angles_std = np.std(vert_angles) 
+    hori_angles_mean = np.mean(hori_angles)
+    hori_angles_std = np.std(hori_angles)
+    vert_lengths_mean = np.mean(vert_lengths)
+    vert_lengths_std = np.std(vert_lengths)
+    hori_lengths_mean = np.mean(hori_lengths)
+    hori_lengths_std = np.std(hori_lengths)
+    
+    #Count number of remaining vertical and horizontal lines
+    num_vert_lines = len(vert_inds)
+    num_hori_lines = len(hori_inds)
+    
     #Select representative horizontal lines
-    hori_lines, hori_inds, y_intercepts, reject_inds = histogramLineFilter(lines, hori_lines, hori_angles, hori_inds, y_intercepts,\
-                                                                 reject_inds, 2, debug=debug) 
+    if num_hori_lines > hori_select_ct:
+        hori_lines, hori_inds, y_intercepts, reject_inds = histogramLineFilter(lines, hori_lines, hori_angles, hori_inds, y_intercepts,\
+                                                                 reject_inds, hori_select_ct, debug=debug) 
+    elif num_hori_lines < 2:
+        error_msg = 'Insufficient horizontal lines'
+        error_msgs.append(error_msg)
+        
     
     #Select representative vertical lines
-    vert_inds, vert_lines, vert_vanish_pt, vert_vanish_pts, vert_vanish_xs, vert_vanish_ys, vert_vanish_inds, reject_inds = \
-    vanishingPointLineFilter(lines, vert_inds, reject_inds, hough_theta, debug=debug)
+    vert_vanish_pt = []
+    vert_vanish_pts = []
+    vert_vanish_xs = []
+    vert_vanish_ys = []
+    vert_vanish_inds = []
+    if num_vert_lines > vert_select_ct:
+        if vert_select_mode == 'vanish point':
+            vert_inds, vert_lines, vert_vanish_pt, vert_vanish_pts, vert_vanish_xs, vert_vanish_ys, vert_vanish_inds, reject_inds = \
+            vanishingPointLineFilter(lines, vert_inds, reject_inds, hough_theta, debug=debug)
+        elif vert_select_mode == 'histogram':
+            vert_lines, vert_inds, x_intercepts, reject_inds = histogramLineFilter(lines, vert_lines, vert_angles, vert_inds,\
+                                                                                   x_intercepts, reject_inds, vert_select_ct, debug=debug)
+            if len(vert_inds) == 3:
+                reject_inds.append(vert_inds[1])
+                vert_lines = [vert_lines[0], vert_lines[2]]  #Neglect center bin
+                vert_inds = [vert_inds[0], vert_inds[2]]
+            elif len(vert_inds) < 2 :
+                error_msg = 'Insufficient vertical lines.'
+                error_msgs.append(error_msg)
+                print(error_msg)
+        else:  #Select randomly
+            x=y
+    elif num_vert_lines < 2:
+        error_msg = 'Insufficient vertical lines.'
+        error_msgs.append(error_msg)
+        print(error_msg)
+
     
     #Compile reject lines
     reject_lines = []
     for ind in reject_inds:
-        reject_lines.append(lines[ind]['points'])    
+        reject_lines.append(lines[ind]['points'])
+        
+    #Update angles and lines
+    vert_angles = []
+    for ind in vert_inds:
+        vert_angles.append(lines[ind]['angle_deg'])
+    hori_angles = []
+    for ind in hori_inds:
+        hori_angles.append(lines[ind]['angle_deg'])
+                       
+        
+    #Calculate statistics on selected lines
+    #print(vert_lines), print(vert_inds), print(vert_angles)
+    
+    
     
     #Define additional outputs
-    outputs = {'vert_angles_mean': vert_angles_mean, 'vert_angles_std': vert_angles_std, 'hori_angles_mean': hori_angles_mean, \
+    outputs = {'vert_angles_all': vert_angles_all, 'vert_angles_mean': vert_angles_mean, 'vert_angles_std': vert_angles_std,\
+               'hori_angles_all': hori_angles_all, 'hori_angles_mean': hori_angles_mean, \
                'hori_angles_std': hori_angles_std, 'vert_vanish_pt': vert_vanish_pt, 'vert_vanish_pts':vert_vanish_pts, \
                'vert_vanish_xs':vert_vanish_xs, 'vert_vanish_ys':vert_vanish_ys, 'vert_vanish_inds':vert_vanish_inds, \
-               'redundant_outputs': redundant_outputs}    
+               'redundant_outputs': redundant_outputs, 'error_msgs': error_msgs}    
     
     #Define outputs
     return vert_inds, vert_lines, vert_angles, hori_inds, hori_lines, hori_angles, reject_inds, reject_lines, outputs 
@@ -1010,7 +1110,7 @@ def projectiveTransform(image, lines, vert_inds, hori_inds, gray_smooth, resize_
             gray_sample_box = []
         
         #Print update
-        print('      Perspective correction successful!')
+        #print('      Perspective correction successful!')
         
     except Exception:
         
@@ -1028,4 +1128,87 @@ def projectiveTransform(image, lines, vert_inds, hori_inds, gray_smooth, resize_
     return transed, proj_transform, rot_ang, gray_sample_lines, gray_sample_box    
         
 #def correctPerspective():
+
+
+def detectFrameOutline(rgb, debug=True):
+    
+    #Convert image to other representations
+    gray = cv.cvtColor(rgb, cv.COLOR_RGB2GRAY)
+    hsv = cv.cvtColor(rgb, cv.COLOR_RGB2HSV)
+    h = hsv[:,:,0]
+    s = hsv[:,:,1]
+    v = hsv[:,:,2]
+    r = rgb[:,:,0]
+    g = rgb[:,:,1]
+    b = rgb[:,:,2]
+    
+    #Pull image size
+    rows, cols, channels = rgb.shape 
+    if rows > cols:
+        max_dim = rows
+        min_dim = cols
+        portrait = True
+        orientation = 'vertically'
+    else:
+        max_dim = cols
+        min_dim = rows
+        portrait = False          
+        orientation = 'horizontally'
+
+    #Feedback
+    if debug:
+        print(f'       Module is oriented {orientation}.')
+        plt.figure()
+        plt.imshow(rgb)
+    
+       
+    #Define Segment indicies
+    max_dim_inds = np.linspace(0, max_dim, 4)   #three segments
+    min_dim_inds = np.linspace(0, min_dim, 3)   #two segments
+
+    print(min_dim_inds), print(max_dim_inds)
+    
+    #Divide segments
+    segments_gray = []
+    for s in range(0,6):
+        
+        #Define indicies to pull each directions pixel indicies from
+        imin = np.mod(s, 2)
+        imax = np.mod(s, 3)
+        
+        #Pull segment from image
+        if portrait:  
+            x1 = int(min_dim_inds[imin])
+            x2 = int(min_dim_inds[imin + 1])
+            y1 = int(max_dim_inds[imax])
+            y2 = int(max_dim_inds[imax + 1])
+            segment_gray = gray[x1:x2, y1:y2]
+            segments_gray.append(segment_gray)
+        else:
+            x1 = int(min_dim_inds[imax])
+            x2 = int(min_dim_inds[imax + 1])
+            y1 = int(max_dim_inds[imin])
+            y2 = int(max_dim_inds[imin + 1])
+            segment_gray = gray[x1:x2, y1:y2]
+            segments_gray.append(segment_gray)
+            
+        #Display segment
+        if debug:
+            plt.figure()
+            plt.imshow(segment_gray)
+            
+        #Iterate through rows - detect boundary
+        plt.figure()
+        for r in range(0, (x2-x1)):
+            data_gray = segment_gray[r, :]
+            
+            if debug: 
+                
+                plt.plot(data_gray)
+           
+        
+        
+        
+        #Iterate through columns
+        x=y
     
